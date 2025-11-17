@@ -1,0 +1,33 @@
+{
+  "health": {
+    "title": "Ҳолати",
+    "refresh.button": "Янгилаш",
+    "stacktrace": "Стектрейс",
+    "details": {
+      "details": "Батафсил",
+      "properties": "Хоссалари",
+      "name": "Номи",
+      "value": "Қиймати",
+      "error": "Хатолик"
+    },
+    "indicator": {
+      "binders": "Xabar brokeri",
+      "diskSpace": "Дискдаги жой",
+      "mail": "Email",
+      "livenessState": "Liveness state",
+      "readinessState": "Readiness state",
+      "ping": "Application",
+      "elasticsearch": "Elasticsearch",
+      "r2dbc": "Маълумотлар базаси"
+    },
+    "table": {
+      "service": "Сервис номи",
+      "status": "Ҳолат"
+    },
+    "status": {
+      "UNKNOWN": "UNKNOWN",
+      "UP": "ФАОЛ",
+      "DOWN": "ФАОЛ ЭМАС"
+    }
+  }
+}
