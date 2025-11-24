@@ -1,0 +1,27 @@
+{
+  "qMessagingApp": {
+    "conversation": {
+      "home": {
+        "title": "Conversations",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Kreirati Conversation",
+        "createOrEditLabel": "Kreirati ili urediti Conversation",
+        "search": "Tražiti Conversation",
+        "notFound": "Nije nađeno Conversations"
+      },
+      "created": "Kreiran je Conversation sa identifikatorom {{ param }}",
+      "updated": "Ažuriran je Conversation sa identifikatorom {{ param }}",
+      "deleted": "Obrisan je Conversation sa identifikatorom {{ param }}",
+      "delete": {
+        "question": "Da li ste sigurni da želite obrisati Conversation {{ id }}?"
+      },
+      "detail": {
+        "title": "Conversation"
+      },
+      "id": "ID",
+      "createdAt": "Created At",
+      "user1": "User 1",
+      "user2": "User 2"
+    }
+  }
+}

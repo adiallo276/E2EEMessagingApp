@@ -1,0 +1,27 @@
+{
+  "qMessagingApp": {
+    "conversation": {
+      "home": {
+        "title": "Conversations",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Vytvořit Conversation",
+        "createOrEditLabel": "Vytvořit nebo upravit Conversation",
+        "search": "Vyhledat Conversation",
+        "notFound": "No Conversations found"
+      },
+      "created": "Byl vytvořen potomek entity Conversation s identifikátorem {{ param }}",
+      "updated": "Potomek entity Conversation s identifikátorem {{ param }} byl upravený.",
+      "deleted": "Potomek entity Conversation s identifikátorem {{ param }} bol smazaný.",
+      "delete": {
+        "question": "Jste si jisti, že chcete smazat Conversation {{ id }}?"
+      },
+      "detail": {
+        "title": "Conversation"
+      },
+      "id": "ID",
+      "createdAt": "Created At",
+      "user1": "User 1",
+      "user2": "User 2"
+    }
+  }
+}

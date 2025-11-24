@@ -1,0 +1,27 @@
+{
+  "qMessagingApp": {
+    "conversation": {
+      "home": {
+        "title": "Conversations",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Створити новий Conversation",
+        "createOrEditLabel": "Створити чи редагувати Conversation",
+        "search": "Знайти Conversation",
+        "notFound": "No Conversations found"
+      },
+      "created": "Новий Conversation створений з ідентифікатором {{ param }}",
+      "updated": "Conversation оновлений з ідентифікатором {{ param }}",
+      "deleted": "Conversation видалений з ідентифікатором {{ param }}",
+      "delete": {
+        "question": "Ви впевнені, що хочете видалити Conversation {{ id }}?"
+      },
+      "detail": {
+        "title": "Conversation"
+      },
+      "id": "ID",
+      "createdAt": "Created At",
+      "user1": "User 1",
+      "user2": "User 2"
+    }
+  }
+}

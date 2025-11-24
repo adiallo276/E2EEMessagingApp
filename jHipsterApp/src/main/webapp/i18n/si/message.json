@@ -1,0 +1,29 @@
+{
+  "qMessagingApp": {
+    "message": {
+      "home": {
+        "title": "Messages",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "නව Message එකක් සාදන්න",
+        "createOrEditLabel": "Message සාදන්න හෝ සංස්කරණය කරන්න",
+        "search": "Message සඳහා සොයන්න",
+        "notFound": "Messages හමු නොවීය"
+      },
+      "created": "{{ param }} හඳුනාගැනීමෙන් නව Message සාදනු ලැබේ",
+      "updated": "{{ param }} හඳුනාගැනීමෙන් Message යාවත්කාලීන වේ",
+      "deleted": "{{ param }} හඳුනාගැනීමෙන් Message මකා දමනු ලැබේ",
+      "delete": {
+        "question": "Message {{ id }} මකා දැමීමට ඔබට විශ්වාසද?"
+      },
+      "detail": {
+        "title": "Message"
+      },
+      "id": "ID",
+      "content": "Content",
+      "ciphertext": "Ciphertext",
+      "timestamp": "Timestamp",
+      "conversation": "Conversation",
+      "sender": "Sender"
+    }
+  }
+}

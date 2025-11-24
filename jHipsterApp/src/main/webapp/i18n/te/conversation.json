@@ -1,0 +1,27 @@
+{
+  "qMessagingApp": {
+    "conversation": {
+      "home": {
+        "title": "Conversations",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "కొత్త Conversation  సృష్టించండి",
+        "createOrEditLabel": "Conversation సృష్టించండి లేదా సవరించండి",
+        "search": "Conversation కొరకు శోధించండి",
+        "notFound": "No Conversations found"
+      },
+      "created": "{{ param }} ఐడీ తో ఒక కొత్త Conversation సృష్టించబడినది",
+      "updated": "{{ param }} ఐడీ తో ఒక కొత్త Conversation సవరించబడినది",
+      "deleted": "{{ param }} ఐడీ తో ఒక కొత్త Conversation తొలగించబడినది",
+      "delete": {
+        "question": "మీరు Conversation {{ id }} ఖచ్చితంగా తొలగించాలనుకుంటున్నారా?"
+      },
+      "detail": {
+        "title": "Conversation"
+      },
+      "id": "ID",
+      "createdAt": "Created At",
+      "user1": "User 1",
+      "user2": "User 2"
+    }
+  }
+}

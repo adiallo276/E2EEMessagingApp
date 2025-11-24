@@ -1,0 +1,29 @@
+{
+  "qMessagingApp": {
+    "message": {
+      "home": {
+        "title": "Messages",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "建立一筆新的 Message",
+        "createOrEditLabel": "建立或編輯 Message",
+        "search": "搜尋 Message",
+        "notFound": "No Messages found"
+      },
+      "created": "新的 Message 建立成功，識別碼為 {{ param }}",
+      "updated": "識別碼為 {{ param }} 的 Message 更新成功",
+      "deleted": "識別碼為 {{ param }} 的 Message 刪除成功",
+      "delete": {
+        "question": "您確定要刪除 Message {{ id }} 嗎?"
+      },
+      "detail": {
+        "title": "Message"
+      },
+      "id": "ID",
+      "content": "Content",
+      "ciphertext": "Ciphertext",
+      "timestamp": "Timestamp",
+      "conversation": "Conversation",
+      "sender": "Sender"
+    }
+  }
+}

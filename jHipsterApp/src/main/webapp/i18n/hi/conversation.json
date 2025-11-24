@@ -1,0 +1,27 @@
+{
+  "qMessagingApp": {
+    "conversation": {
+      "home": {
+        "title": "Conversations",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "नया Conversation बनाएँ",
+        "createOrEditLabel": "Conversation बनाएँ या संपादित करें",
+        "search": "Conversation खोजें",
+        "notFound": "No Conversations found"
+      },
+      "created": "एक नया Conversation [identifier: {{ param }}] तैयार है",
+      "updated": "एक Conversation [identifier: {{ param }}] का अद्यतन हुआ है",
+      "deleted": "Conversation [identifier: {{ param }}] हटा दिया है",
+      "delete": {
+        "question": "Conversation [id: {{ id }}] हटाने की पुष्टि करें"
+      },
+      "detail": {
+        "title": "Conversation"
+      },
+      "id": "ID",
+      "createdAt": "Created At",
+      "user1": "User 1",
+      "user2": "User 2"
+    }
+  }
+}

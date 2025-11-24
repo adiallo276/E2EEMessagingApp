@@ -1,0 +1,29 @@
+{
+  "qMessagingApp": {
+    "message": {
+      "home": {
+        "title": "Messages",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Δημιουργήστε ένα νέο Message",
+        "createOrEditLabel": "Δημιουργήστε η επεξεργαστείτε ένα Message",
+        "search": "Αναζήτηση για Message",
+        "notFound": "No Messages found"
+      },
+      "created": "Ένα νέο Message έχει δημιουργηθεί με αναγνωριστικό {{ param }}",
+      "updated": "Ένα Message έχει ενημερωθεί με αναγνωριστικό {{ param }}",
+      "deleted": "Ένα Message έχει διαγραφτεί με αναγνωριστικό {{ param }}",
+      "delete": {
+        "question": "Είστε βέβαιοι όταν θέλετε να διαγράψετε το ακόλουθο Message {{ id }};"
+      },
+      "detail": {
+        "title": "Message"
+      },
+      "id": "ID",
+      "content": "Content",
+      "ciphertext": "Ciphertext",
+      "timestamp": "Timestamp",
+      "conversation": "Conversation",
+      "sender": "Sender"
+    }
+  }
+}

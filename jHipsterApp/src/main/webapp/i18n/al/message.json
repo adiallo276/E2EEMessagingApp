@@ -1,0 +1,29 @@
+{
+  "qMessagingApp": {
+    "message": {
+      "home": {
+        "title": "Messages",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Krijo një të ri Message",
+        "createOrEditLabel": "Krijo ose përpuno një Message",
+        "search": "Kërko për Message",
+        "notFound": "No Messages found"
+      },
+      "created": "Një Message i ri u krijua me identifikues {{ param }}",
+      "updated": "Një Message u përpunua me identifikues {{ param }}",
+      "deleted": "Një Message u fshi me identifikues {{ param }}",
+      "delete": {
+        "question": "Jeni i sigurtë që doni të fshini Message {{ id }}?"
+      },
+      "detail": {
+        "title": "Message"
+      },
+      "id": "ID",
+      "content": "Content",
+      "ciphertext": "Ciphertext",
+      "timestamp": "Timestamp",
+      "conversation": "Conversation",
+      "sender": "Sender"
+    }
+  }
+}

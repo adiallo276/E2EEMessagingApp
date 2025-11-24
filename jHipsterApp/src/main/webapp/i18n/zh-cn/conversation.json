@@ -1,0 +1,27 @@
+{
+  "qMessagingApp": {
+    "conversation": {
+      "home": {
+        "title": "Conversations",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "创建新 Conversation",
+        "createOrEditLabel": "创建或编辑 Conversation",
+        "search": "查找 Conversation",
+        "notFound": "No Conversations found"
+      },
+      "created": "Conversation {{ param }} 创建成功",
+      "updated": "Conversation {{ param }} 更新成功",
+      "deleted": "Conversation {{ param }} 删除成功",
+      "delete": {
+        "question": "你确定要删除 Conversation {{ id }} 吗？"
+      },
+      "detail": {
+        "title": "Conversation"
+      },
+      "id": "ID",
+      "createdAt": "Created At",
+      "user1": "User 1",
+      "user2": "User 2"
+    }
+  }
+}

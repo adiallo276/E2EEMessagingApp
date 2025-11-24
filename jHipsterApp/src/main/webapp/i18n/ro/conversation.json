@@ -1,0 +1,27 @@
+{
+  "qMessagingApp": {
+    "conversation": {
+      "home": {
+        "title": "Conversations",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Creeare o nouă entitate Conversation",
+        "createOrEditLabel": "Creeare sau editare Conversation",
+        "search": "Căutare după Conversation",
+        "notFound": "No Conversations found"
+      },
+      "created": "A fost creată o nouă entitate Conversation cu identificatorul {{ param }}",
+      "updated": "Conversation cu identificatorul {{ param }} a fost actualizată",
+      "deleted": "Conversation cu identificatorul {{ param }} a fost ștearsă",
+      "delete": {
+        "question": "Sunteți sigur că doriți să ștergeți Conversation {{ id }}?"
+      },
+      "detail": {
+        "title": "Conversation"
+      },
+      "id": "ID",
+      "createdAt": "Created At",
+      "user1": "User 1",
+      "user2": "User 2"
+    }
+  }
+}

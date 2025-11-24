@@ -1,0 +1,29 @@
+{
+  "qMessagingApp": {
+    "message": {
+      "home": {
+        "title": "Messages",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "创建新 Message",
+        "createOrEditLabel": "创建或编辑 Message",
+        "search": "查找 Message",
+        "notFound": "No Messages found"
+      },
+      "created": "Message {{ param }} 创建成功",
+      "updated": "Message {{ param }} 更新成功",
+      "deleted": "Message {{ param }} 删除成功",
+      "delete": {
+        "question": "你确定要删除 Message {{ id }} 吗？"
+      },
+      "detail": {
+        "title": "Message"
+      },
+      "id": "ID",
+      "content": "Content",
+      "ciphertext": "Ciphertext",
+      "timestamp": "Timestamp",
+      "conversation": "Conversation",
+      "sender": "Sender"
+    }
+  }
+}

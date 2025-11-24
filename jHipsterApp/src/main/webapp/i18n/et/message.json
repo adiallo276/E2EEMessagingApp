@@ -1,0 +1,29 @@
+{
+  "qMessagingApp": {
+    "message": {
+      "home": {
+        "title": "Messages",
+        "refreshListLabel": "Värskenda nimekirja",
+        "createLabel": "Lisa uus Message",
+        "createOrEditLabel": "Lisa või muuda Message",
+        "search": "Otsi Message",
+        "notFound": "Ei leitud ühtegi Messages"
+      },
+      "created": "Uus Message on loodud identifikaatoriga {{ param }}",
+      "updated": "Message identifikaatoriga {{ param }} on muudetud",
+      "deleted": "Message identifikaatoriga {{ param }} on kustutatud",
+      "delete": {
+        "question": "Kas olete kindel, et soovite kustutada Message {{ id }}?"
+      },
+      "detail": {
+        "title": "Message"
+      },
+      "id": "ID",
+      "content": "Content",
+      "ciphertext": "Ciphertext",
+      "timestamp": "Timestamp",
+      "conversation": "Conversation",
+      "sender": "Sender"
+    }
+  }
+}

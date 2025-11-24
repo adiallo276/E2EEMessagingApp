@@ -1,0 +1,27 @@
+{
+  "qMessagingApp": {
+    "conversation": {
+      "home": {
+        "title": "Conversations",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo Conversation",
+        "createOrEditLabel": "Crear o editar Conversation",
+        "search": "Buscar Conversation",
+        "notFound": "Ningún Conversations encontrado"
+      },
+      "created": "Un nuevo Conversation ha sido creado con el identificador {{ param }}",
+      "updated": "Un Conversation ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un Conversation ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar Conversation {{ id }}?"
+      },
+      "detail": {
+        "title": "Conversation"
+      },
+      "id": "ID",
+      "createdAt": "Created At",
+      "user1": "User 1",
+      "user2": "User 2"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "qMessagingApp": {
+    "message": {
+      "home": {
+        "title": "Messages",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "नया Message बनाएँ",
+        "createOrEditLabel": "Message बनाएँ या संपादित करें",
+        "search": "Message खोजें",
+        "notFound": "No Messages found"
+      },
+      "created": "एक नया Message [identifier: {{ param }}] तैयार है",
+      "updated": "एक Message [identifier: {{ param }}] का अद्यतन हुआ है",
+      "deleted": "Message [identifier: {{ param }}] हटा दिया है",
+      "delete": {
+        "question": "Message [id: {{ id }}] हटाने की पुष्टि करें"
+      },
+      "detail": {
+        "title": "Message"
+      },
+      "id": "ID",
+      "content": "Content",
+      "ciphertext": "Ciphertext",
+      "timestamp": "Timestamp",
+      "conversation": "Conversation",
+      "sender": "Sender"
+    }
+  }
+}

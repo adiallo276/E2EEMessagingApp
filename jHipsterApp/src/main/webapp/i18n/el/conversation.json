@@ -1,0 +1,27 @@
+{
+  "qMessagingApp": {
+    "conversation": {
+      "home": {
+        "title": "Conversations",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Δημιουργήστε ένα νέο Conversation",
+        "createOrEditLabel": "Δημιουργήστε η επεξεργαστείτε ένα Conversation",
+        "search": "Αναζήτηση για Conversation",
+        "notFound": "No Conversations found"
+      },
+      "created": "Ένα νέο Conversation έχει δημιουργηθεί με αναγνωριστικό {{ param }}",
+      "updated": "Ένα Conversation έχει ενημερωθεί με αναγνωριστικό {{ param }}",
+      "deleted": "Ένα Conversation έχει διαγραφτεί με αναγνωριστικό {{ param }}",
+      "delete": {
+        "question": "Είστε βέβαιοι όταν θέλετε να διαγράψετε το ακόλουθο Conversation {{ id }};"
+      },
+      "detail": {
+        "title": "Conversation"
+      },
+      "id": "ID",
+      "createdAt": "Created At",
+      "user1": "User 1",
+      "user2": "User 2"
+    }
+  }
+}

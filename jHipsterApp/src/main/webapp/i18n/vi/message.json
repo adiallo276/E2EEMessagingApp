@@ -1,0 +1,29 @@
+{
+  "qMessagingApp": {
+    "message": {
+      "home": {
+        "title": "Messages",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Thêm mới một Message",
+        "createOrEditLabel": "Thêm mới hoặc cập nhật Message",
+        "search": "Tìm Message",
+        "notFound": "No Messages found"
+      },
+      "created": "Một Message mới được tạo với định danh {{ param }}",
+      "updated": "Một Message cập nhật với định danh {{ param }}",
+      "deleted": "Một Message đã xóa với định danh {{ param }}",
+      "delete": {
+        "question": "Bạn có chắc là muốn xóa Message {{ id }}?"
+      },
+      "detail": {
+        "title": "Message"
+      },
+      "id": "ID",
+      "content": "Content",
+      "ciphertext": "Ciphertext",
+      "timestamp": "Timestamp",
+      "conversation": "Conversation",
+      "sender": "Sender"
+    }
+  }
+}

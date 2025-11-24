@@ -1,0 +1,29 @@
+{
+  "qMessagingApp": {
+    "message": {
+      "home": {
+        "title": "Messages",
+        "refreshListLabel": "Refresh list",
+        "createLabel": "Създайте нов Message",
+        "createOrEditLabel": "Създайте или редактирайте Message",
+        "search": "Търси Message",
+        "notFound": "Messages не са намерени"
+      },
+      "created": "Създаден е нов Message с идентификатор {{ param }}",
+      "updated": "Message с идентификатор {{ param }} e oбновен",
+      "deleted": "Message с идентификатор {{ param }} е изтрит",
+      "delete": {
+        "question": "Наистина ли искате да изтриете Message {{ id }}?"
+      },
+      "detail": {
+        "title": "Message"
+      },
+      "id": "ID",
+      "content": "Content",
+      "ciphertext": "Ciphertext",
+      "timestamp": "Timestamp",
+      "conversation": "Conversation",
+      "sender": "Sender"
+    }
+  }
+}

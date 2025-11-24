@@ -1,0 +1,29 @@
+{
+  "qMessagingApp": {
+    "message": {
+      "home": {
+        "title": "Messages",
+        "refreshListLabel": "Refrescar lista",
+        "createLabel": "Crear nuevo Message",
+        "createOrEditLabel": "Crear o editar Message",
+        "search": "Buscar Message",
+        "notFound": "Ningún Messages encontrado"
+      },
+      "created": "Un nuevo Message ha sido creado con el identificador {{ param }}",
+      "updated": "Un Message ha sido actualizado con el identificador {{ param }}",
+      "deleted": "Un Message ha sido eliminado con el identificador {{ param }}",
+      "delete": {
+        "question": "¿Seguro que quiere eliminar Message {{ id }}?"
+      },
+      "detail": {
+        "title": "Message"
+      },
+      "id": "ID",
+      "content": "Content",
+      "ciphertext": "Ciphertext",
+      "timestamp": "Timestamp",
+      "conversation": "Conversation",
+      "sender": "Sender"
+    }
+  }
+}
