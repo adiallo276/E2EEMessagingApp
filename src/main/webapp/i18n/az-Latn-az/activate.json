@@ -1,9 +1,0 @@
-{
-  "activate": {
-    "title": "Aktivləşdirmə",
-    "messages": {
-      "success": "<strong>İstifadəçi aktivləşdirmə prosesi başa çatdı.</strong> Zəhmət olmasa, ",
-      "error": "<strong>İstifadəçi aktivləşdirmə prosesi uğurla başa çatmadı.</strong> Zəhmət olmasa, giriş səhifəsindən qeydiyyatdan keçin."
-    }
-  }
-}

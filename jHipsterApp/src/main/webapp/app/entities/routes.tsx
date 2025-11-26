@@ -4,6 +4,7 @@ import ErrorBoundaryRoutes from 'app/shared/error/error-boundary-routes';
 
 import Conversation from './conversation';
 import Message from './message';
+import { Route } from 'react-router-dom';
 /* jhipster-needle-add-route-import - JHipster will add routes here */
 
 export default () => {

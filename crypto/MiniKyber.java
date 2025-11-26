@@ -1,6 +1,6 @@
 /*
  * CREATED: 08/11/2025
- * LAST UPDATED: 11/11/2025
+ * LAST UPDATED: 19/11/2025
  * PURPOSE: Core algorithm, generates the keys, encrypts and decrypts data 
  */
 
