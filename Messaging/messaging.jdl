@@ -1,0 +1,29 @@
+entity Conversation {
+  createdAt Instant required
+}
+
+entity Message {
+  content String required minlength(1)
+  ciphertext TextBlob
+  timestamp Instant required
+}
+
+relationship ManyToOne {
+  Message{conversation} to Conversation
+}
+
+relationship ManyToOne {
+  Message{sender(login)} to User with builtInEntity
+}
+
+relationship ManyToOne {
+  Conversation{user1(login)} to User with builtInEntity
+}
+
+relationship ManyToOne {
+  Conversation{user2(login)} to User with builtInEntity
+}
+
+
+dto * with mapstruct
+service * with serviceImpl
