@@ -34,7 +34,6 @@ public class AuthController {
         return jwt.generateToken(req.username);
     }
 
-    // No Lombok needed — plain Java class
     static class AuthRequest {
         public String username;
         public String password;

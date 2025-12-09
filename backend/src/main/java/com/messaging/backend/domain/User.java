@@ -15,7 +15,6 @@ public class User {
 
     private String password;
 
-    // Required by Spring Security
     private String roles = "USER";
 
     public User() {}
@@ -25,7 +24,6 @@ public class User {
         this.password = password;
     }
 
-    // --- Getters ---
     public Long getId() {
         return id;
     }
@@ -42,7 +40,6 @@ public class User {
         return roles;
     }
 
-    // --- Setters ---
     public void setId(Long id) {
         this.id = id;
     }

@@ -17,14 +17,14 @@ public class JwtUtil {
     public String generateToken(String username) {
         return Jwts.builder()
                 .subject(username)
-                .expiration(new Date(System.currentTimeMillis() + 86400000)) // 1 day
+                .expiration(new Date(System.currentTimeMillis() + 86400000)) 
                 .signWith(key)
                 .compact();
     }
 
     public String extractUsername(String token) {
         Claims claims = Jwts.parser()
-                .verifyWith(key)     // NOW VALID
+                .verifyWith(key)  
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
