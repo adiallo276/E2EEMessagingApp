@@ -31,4 +31,7 @@ public class JwtUtil {
 
         return claims.getSubject();
     }
+    public SecretKey getKey() {
+        return (SecretKey) key;
+    }
 }
