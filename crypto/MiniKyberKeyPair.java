@@ -1,11 +1,15 @@
 /*
  * CREATED: 08/11/2025
- * LAST UPDATED: 11/11/2025
+ * LAST UPDATED: 09/12/2025
  * PURPOSE: 
  */
 
 
 package crypto;
+
+/*
+ * MiniKyber Key Pair holding public (a,t) and private keys (s).
+ */
 
 public class MiniKyberKeyPair {
     public final Polynomial a; // This will be the public parameeter (random polynomial A)
@@ -16,5 +20,17 @@ public class MiniKyberKeyPair {
         this.a = a;
         this.t = t;
         this.s = s;
+    }
+
+    public Polynomial getA() {
+        return a;
+    }
+
+    public Polynomial getT() {
+        return t;
+    }
+
+    public Polynomial getS() {
+        return s;
     }
 }
