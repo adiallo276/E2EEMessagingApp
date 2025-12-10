@@ -5,7 +5,7 @@
  */
 
 
-package crypto;
+package miniKyber;
 
 /*
  * MiniKyber Key Pair holding public (a,t) and private keys (s).

@@ -4,7 +4,7 @@
  * PURPOSE: Used for testing for the algorithms 
  */
 
-package crypto;
+package miniKyber;
 
 import java.util.Arrays;
 

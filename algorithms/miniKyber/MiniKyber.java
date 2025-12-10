@@ -4,7 +4,7 @@
  * PURPOSE: Core algorithm, generates the keys, encrypts and decrypts data 
  */
 
-package crypto;
+package miniKyber;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;

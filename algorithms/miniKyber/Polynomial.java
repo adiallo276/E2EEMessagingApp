@@ -3,7 +3,7 @@
 * LAST UPDATED 09/12/2025
 * PURPOSE: Performs operations like addition, subtraction, and multiplications of polynomials. Mathematical foundation for Kyber
 */
-package crypto;
+package miniKyber;
 import java.security.SecureRandom;
 import java.util.Arrays;
 
