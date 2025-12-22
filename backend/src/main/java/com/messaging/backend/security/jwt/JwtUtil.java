@@ -12,6 +12,7 @@ import java.util.Date;
 @Component
 public class JwtUtil {
 
+    @SuppressWarnings("deprecation")
     private final SecretKey key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
 
     public String generateToken(String username) {
