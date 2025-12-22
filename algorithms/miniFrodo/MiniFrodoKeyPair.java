@@ -1,5 +1,10 @@
-package miniFrodo;
+/*
+ * CREATED: 02/12/2025
+ * LAST UPDATED: 22/12/2025
+ * PURPOSE: Key pair for MiniFrodo.
+ */
 
+package miniFrodo;
 import java.security.SecureRandom;
 import java.util.Arrays;
 
