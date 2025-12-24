@@ -1,30 +1,26 @@
 package com.messaging.backend.security.jwt;
 
-import com.messaging.backend.domain.User;
-import com.messaging.backend.repository.UserRepository;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
-import org.springframework.web.filter.OncePerRequestFilter;
-
-import javax.crypto.SecretKey;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
 import java.io.IOException;
+import java.util.List;
 
 @Component
 public class JwtFilter extends OncePerRequestFilter {
 
-    @Autowired
-    private JwtUtil jwtUtil;
+    private final JwtUtil jwtUtil;
 
-    @Autowired
-    private UserRepository users;
+    public JwtFilter(JwtUtil jwtUtil) {
+        this.jwtUtil = jwtUtil;
+    }
 
     @Override
     protected void doFilterInternal(
@@ -39,29 +35,19 @@ public class JwtFilter extends OncePerRequestFilter {
             String token = authHeader.substring(7);
 
             try {
-                Claims claims = Jwts.parser()
-                        .verifyWith((SecretKey) jwtUtil.getKey())
-                        .build()
-                        .parseSignedClaims(token)
-                        .getPayload();
+                String username = jwtUtil.extractUsername(token);
 
-                String username = claims.getSubject();
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                username,
+                                null,
+                                List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                        );
 
-                User user = users.findByUsername(username).orElse(null);
-
-                if (user != null) {
-                    UsernamePasswordAuthenticationToken authToken =
-                            new UsernamePasswordAuthenticationToken(
-                                    username,
-                                    null,
-                                    java.util.Collections.emptyList()
-                            );
-
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                }
-
+                SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (Exception e) {
-                // Bad token → ignore and proceed without authentication
+                // invalid/expired token -> continue without authentication
+                SecurityContextHolder.clearContext();
             }
         }
 
