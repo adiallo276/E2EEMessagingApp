@@ -3,62 +3,59 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { Client } from "@stomp/stompjs";
+import { Client, IMessage, StompSubscription } from "@stomp/stompjs";
+import SockJS from "sockjs-client";
 
 type Message = {
   id: number;
+  conversationId?: number;
   content: string;
-  sender?: { username?: string };
+  senderUsername?: string;
   timestamp?: string;
 };
 
 export default function MessagesPage() {
   const params = useParams();
   const router = useRouter();
-  const conversationId = params.id as string;
+  const conversationId = String((params as any).id);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const clientRef = useRef<Client | null>(null);
+  const subRef = useRef<StompSubscription | null>(null);
 
   async function loadInitialMessages() {
     try {
       const data = await api(`/messages/${conversationId}`);
       setMessages(data);
     } catch (e: any) {
-      setError(e.message || "Failed to load messages");
-      if (String(e.message).includes("401")) router.push("/login");
+      setError(e?.message || "Failed to load messages");
+      if (String(e?.message).includes("401")) router.push("/login");
     }
   }
 
-  async function connectSocket() {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+  function connectSocket() {
+    const token = localStorage.getItem("token") || "";
 
     const client = new Client({
-      brokerURL: `ws://localhost:8080/ws?token=${encodeURIComponent(token)}`,
+      webSocketFactory: () => new SockJS("http://127.0.0.1:8080/ws"),
+      connectHeaders: { Authorization: `Bearer ${token}` },
       reconnectDelay: 2000,
     });
 
     client.onConnect = () => {
       setError(null);
 
-      // ✅ THIS IS WHERE THE SUBSCRIBE GOES
-      const sub = client.subscribe(`/topic/conversations/${conversationId}`, (msg) => {
+      subRef.current?.unsubscribe();
+      subRef.current = client.subscribe(`/topic/conversations/${conversationId}`, (msg: IMessage) => {
         const incoming: Message = JSON.parse(msg.body);
-        setMessages((prev) => [...prev, incoming]);
+        setMessages(prev => [...prev, incoming]);
       });
-
-      // store subscription if you want to unsubscribe manually later
-      // (we’ll just deactivate the whole client on cleanup)
     };
 
-    client.onStompError = (frame) => {
+    client.onStompError = frame => {
       setError(frame.headers["message"] || "WebSocket error");
     };
 
@@ -66,11 +63,13 @@ export default function MessagesPage() {
       setError("WebSocket connection error");
     };
 
+    client.onDisconnect = () => {};
+
     client.activate();
     clientRef.current = client;
   }
 
-  async function send() {
+  function send() {
     if (!content.trim()) return;
 
     const client = clientRef.current;
@@ -79,22 +78,15 @@ export default function MessagesPage() {
       return;
     }
 
-    try {
-      setError(null);
+    client.publish({
+      destination: "/app/chat.send",
+      body: JSON.stringify({
+        conversationId: Number(conversationId),
+        content,
+      }),
+    });
 
-      // ✅ THIS IS WHERE THE PUBLISH GOES
-      client.publish({
-        destination: "/app/chat.send",
-        body: JSON.stringify({
-          conversationId: Number(conversationId),
-          content,
-        }),
-      });
-
-      setContent("");
-    } catch (e: any) {
-      setError(e.message || "Failed to send");
-    }
+    setContent("");
   }
 
   useEffect(() => {
@@ -104,12 +96,14 @@ export default function MessagesPage() {
     connectSocket();
 
     return () => {
+      subRef.current?.unsubscribe();
+      subRef.current = null;
+
       if (clientRef.current) {
         clientRef.current.deactivate();
         clientRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
 
   return (
@@ -119,9 +113,9 @@ export default function MessagesPage() {
       {error && <div className="text-red-600 mb-2">{error}</div>}
 
       <div className="flex-1 border rounded p-3 mb-4 overflow-auto">
-        {messages.map((m) => (
+        {messages.map(m => (
           <div key={m.id} className="mb-2">
-            <b>{m.sender?.username ?? "Unknown"}: </b>
+            <b>{m.senderUsername ?? (m as any).sender?.username ?? "Unknown"}: </b>
             {m.content}
           </div>
         ))}
@@ -131,9 +125,9 @@ export default function MessagesPage() {
         <input
           className="border rounded flex-1 p-2"
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={e => setContent(e.target.value)}
           placeholder="Type a message..."
-          onKeyDown={(e) => {
+          onKeyDown={e => {
             if (e.key === "Enter") send();
           }}
         />

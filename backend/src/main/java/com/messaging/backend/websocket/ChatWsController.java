@@ -11,6 +11,7 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
+import java.time.Instant;
 import java.security.Principal;
 
 @Controller
@@ -35,6 +36,10 @@ public class ChatWsController {
 
     @MessageMapping("/chat.send")
     public void send(ChatMessageRequest req, Principal principal) {
+        if (principal == null) {
+            throw new RuntimeException("Unauthenticated STOMP session");
+        }
+
         String username = principal.getName();
 
         User sender = users.findByUsername(username)
@@ -45,6 +50,30 @@ public class ChatWsController {
 
         Message saved = messages.save(new Message(req.content, conversation, sender));
 
-        broker.convertAndSend("/topic/conversations/" + req.conversationId, saved);
+        ChatMessageResponse out = new ChatMessageResponse(
+                saved.getId(),
+                conversation.getId(),
+                saved.getContent(),
+                username,
+                saved.getTimestamp()
+        );
+
+        broker.convertAndSend("/topic/conversations/" + conversation.getId(), out);
+    }
+
+    public static class ChatMessageResponse {
+        public Long id;
+        public Long conversationId;
+        public String content;
+        public String senderUsername;
+        public Instant timestamp;
+
+        public ChatMessageResponse(Long id, Long conversationId, String content, String senderUsername, Instant timestamp) {
+            this.id = id;
+            this.conversationId = conversationId;
+            this.content = content;
+            this.senderUsername = senderUsername;
+            this.timestamp = timestamp;
+        }
     }
 }
