@@ -11,7 +11,6 @@ import java.util.Arrays;
 public class MiniKyberTest {
 
     public static void main(String[] args) {
-        // ---- 1. Polynomial sanity test (like you had before) ----
         int[] aCoeffs = {-1, 3, -3, -2, -3, 3, 3, -3};
         int[] bCoeffs = { 1, 3,  0, -2, -2, 3, 0, -3};
 

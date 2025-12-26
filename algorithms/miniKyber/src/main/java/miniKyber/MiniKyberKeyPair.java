@@ -1,15 +1,11 @@
 /*
  * CREATED: 08/11/2025
- * LAST UPDATED: 09/12/2025
- * PURPOSE: 
+ * LAST UPDATED: 26/12/2025
+ * PURPOSE: Stores MiniKyber Key Pair (public and private keys)
  */
 
 
 package miniKyber;
-
-/*
- * MiniKyber Key Pair holding public (a,t) and private keys (s).
- */
 
 public class MiniKyberKeyPair {
     public final Polynomial a; // This will be the public parameeter (random polynomial A)

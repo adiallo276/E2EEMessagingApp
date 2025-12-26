@@ -16,7 +16,7 @@ public class Polynomial {
     public static final int N = 8;
     public static final int Q = 3329;
 
-    private final int[] coeffs; // length N
+    private final int[] coeffs; 
 
     public Polynomial() {
         this.coeffs = new int[N];
@@ -58,10 +58,6 @@ public class Polynomial {
         return res;
     }
 
-    /**
-     * Multiplication in R_q = Z_q[x]/(x^N + 1).
-     * Using schoolbook multiplaction with the rule x^N = -1.
-     */
     public Polynomial mul(Polynomial other) {
         int[] tmp = new int[N];
 
@@ -72,7 +68,6 @@ public class Polynomial {
                 if (k < N) {
                     tmp[k] += prod;
                 } else {
-                    // x^(N + t) = -x^t
                     tmp[k - N] -= prod;
                 }
             }
@@ -85,9 +80,6 @@ public class Polynomial {
         return new Polynomial(tmp);
     }
 
-    /**
-     * Uniform random polynomial with coefficients in [0, Q).
-     */
     public static Polynomial randomUniform(SecureRandom rnd) {
         int[] c = new int[N];
         for (int i = 0; i < N; i++) {
@@ -97,9 +89,6 @@ public class Polynomial {
         return new Polynomial(c);
     }
 
-    /**
-     * Small-noise polynomial with coefficients in {-1, 0, 1}.
-     */
     public static Polynomial randomSmall(SecureRandom rnd) {
         int[] c = new int[N];
         for (int i = 0; i < N; i++) {
@@ -109,9 +98,6 @@ public class Polynomial {
         return new Polynomial(c);
     }
 
-    /**
-     * Encode polynomial to 2*N bytes (little-endian 16-bit per coeff).
-     */
     public byte[] toBytes() {
         byte[] out = new byte[2 * N];
         for (int i = 0; i < N; i++) {

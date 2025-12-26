@@ -109,9 +109,6 @@ public class Matrix {
         return res;
     }
 
-    /**
-     * Sample a matrix with entries uniform in [0, Q).
-     */
     public static Matrix randomUniform(int rows, int cols, SecureRandom rnd) {
         Matrix m = new Matrix(rows, cols);
         for (int i = 0; i < rows; i++) {
@@ -122,24 +119,17 @@ public class Matrix {
         return m;
     }
 
-    /**
-     * Sample a "small" matrix with entries from {-1, 0, 1}.
-     */
     public static Matrix randomSmall(int rows, int cols, SecureRandom rnd) {
         Matrix m = new Matrix(rows, cols);
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
-                int r = rnd.nextInt(3) - 1; // -1, 0, 1
+                int r = rnd.nextInt(3) - 1; 
                 m.data[i][j] = modQ(r);
             }
         }
         return m;
     }
 
-    /**
-     * Serialize entries in row-major order, 2 bytes per entry (little-endian).
-     * Only used for hashing to derive shared secrets.
-     */
     public byte[] toBytes() {
         byte[] out = new byte[rows * cols * 2];
         int idx = 0;

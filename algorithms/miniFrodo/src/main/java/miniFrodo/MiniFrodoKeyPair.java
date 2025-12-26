@@ -1,10 +1,8 @@
 package miniFrodo;
-
-/**
- * Key pair for MiniFrodo:
- *  - A: public matrix (n x n)
- *  - B: public matrix (n x 1)
- *  - S: secret matrix (n x 1)
+/*
+ * CREATED: 02/12/2025
+ * LAST UPDATED: 26/12/2025
+ * PURPOSE: Stores MiniFrodo Key Pair (public and private keys)
  */
 public class MiniFrodoKeyPair {
 

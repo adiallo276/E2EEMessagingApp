@@ -11,18 +11,12 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 
-/**
- * A very simplified "MiniKyber" KEM over R_q = Z_q[x]/(x^N + 1)
- * with N=8, q=3329 and k=1 (single polynomial).
- */
 public class MiniKyber {
 
     public static final int N = Polynomial.N;
     public static final int Q = Polynomial.Q;
 
     private static final SecureRandom rnd = new SecureRandom();
-
-    // ---------- Data classes ----------
 
     public static final class Ciphertext {
         private final Polynomial u;
@@ -77,7 +71,6 @@ public class MiniKyber {
         return new MiniKyberKeyPair(a, s, t);
     }
 
-    // ---------- Encapsulation / decapsulation ----------
 
     public static EncapsulationResult encapsulate(MiniKyberKeyPair keyPair) {
         Polynomial a = keyPair.getA();
@@ -107,20 +100,12 @@ public class MiniKyber {
     public static byte[] decapsulate(MiniKyberKeyPair keyPair, Ciphertext ct) {
         Polynomial s = keyPair.getS();
 
-        // w = v - u*s ≈ mPoly + noise
         Polynomial w = ct.getV().sub(ct.getU().mul(s));
 
         int mRecovered = decodeMessageBit(w);
         return deriveSharedSecret(mRecovered, ct);
     }
 
-    // Message encoding and decoding
-
-    /**
-     * Encode a bit m into a polynomial:
-     *   m = 0 -> all 0
-     *   m = 1 -> all around Q/2
-     */
     private static Polynomial encodeMessageBit(int m) {
         int[] c = new int[N];
         if (m == 1) {
@@ -132,9 +117,6 @@ public class MiniKyber {
         return new Polynomial(c);
     }
 
-    /**
-     * Decode a bit from polynomial w by thresholding the average coefficient.
-     */
     private static int decodeMessageBit(Polynomial w) {
         int[] c = w.getCoeffs();
         long sum = 0;
@@ -145,15 +127,10 @@ public class MiniKyber {
         }
         double avg = sum / (double) N;
 
-        /* Simple threshold halfway between 0 and Q/2
-        *  avg ~ 0           => bit 0
-        avg ~ Q/2 (~1664) => bit 1*/
         double threshold = Q / 4.0;
         return (avg > threshold) ? 1 : 0;
 
     }
-
-    // Shared secret derivation
 
     private static byte[] deriveSharedSecret(int m, Ciphertext ct) {
         try {
