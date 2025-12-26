@@ -9,6 +9,6 @@
     <version>1.0.0</version>
   </parent>
 
-  <artifactId>minikyber</artifactId>
+  <artifactId>miniKyber</artifactId>
   <packaging>jar</packaging>
 </project>

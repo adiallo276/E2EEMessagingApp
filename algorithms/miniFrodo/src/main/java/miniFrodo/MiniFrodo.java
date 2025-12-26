@@ -1,9 +1,10 @@
+package miniFrodo;
 /*
 * CREATED: 02/12/2025
 * LAST UPDATED: 22/12/2025
 * PURPOSE: MiniFrodo: a toy LWE-based KEM using small matrices over Z_q. Further notes below
 */
-package miniFrodo;
+
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;

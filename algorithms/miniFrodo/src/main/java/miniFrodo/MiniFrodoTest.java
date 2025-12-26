@@ -1,10 +1,11 @@
+package miniFrodo;
 /*
 * CREATED: 02/12/2025
 * LAST UPDATED: 22/12/2025
 * PURPOSE: Testing for the algorithm MiniFrodo
 */
 
-package miniFrodo;
+
 import java.util.Arrays;
 
 public class MiniFrodoTest {

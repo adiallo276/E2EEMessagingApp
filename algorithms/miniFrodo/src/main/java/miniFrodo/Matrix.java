@@ -1,17 +1,14 @@
-/*
- * CREATED: 02/12/2025
- * LAST UPDATED: 22/12/2025
- * PURPOSE: Key pair for MiniFrodo.
- */
-
 package miniFrodo;
+/*
+* CREATED 02/12/2025
+* LAST UPDATED 22/12/2025
+* PURPOSE: Performs operations like addition, subtraction, and multiplication of matrices. Mathematical foundation for MiniFrodo.
+*/
+
+
 import java.security.SecureRandom;
 import java.util.Arrays;
 
-/**
- * Small integer matrix over Z_q with q = 257.
- * This is a toy helper class for MiniFrodo.
- */
 public class Matrix {
 
     public static final int Q = 257;
