@@ -25,6 +25,15 @@ public class Message {
     @JoinColumn(name = "sender_id")
     private User sender;
 
+    @Column(nullable = false)
+    private String senderUsername;
+
+    @Column(columnDefinition = "TEXT")
+    private String ivB64;
+
+    @Column(columnDefinition = "TEXT")
+    private String ciphertextB64;
+
     public Message() {}
 
     public Message(String content, Conversation conversation, User sender) {
