@@ -5,10 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.messaging.backend.domain.Conversation;
 import com.messaging.backend.domain.ConversationE2eeKey;
 import com.messaging.backend.domain.ConversationKemEnvelope;
+import com.messaging.backend.pqc.dto.E2eeDtos;
 import com.messaging.backend.repository.ConversationE2eeKeyRepository;
 import com.messaging.backend.repository.ConversationKemEnvelopeRepository;
 import com.messaging.backend.repository.ConversationRepository;
-import com.messaging.backend.pqc.dto.E2eeDtos;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -39,13 +39,16 @@ public class E2eeController {
             @RequestBody E2eeDtos.PublishKeyRequest req,
             Principal principal
     ) throws Exception {
+        if (principal == null) throw new RuntimeException("Unauthenticated");
+
         String me = principal.getName();
         Conversation c = conversations.findById(conversationId).orElseThrow();
 
-        String alg = req.algorithm == null ? "KYBER" : req.algorithm;
+        String alg = (req.algorithm == null || req.algorithm.isBlank()) ? "KYBER" : req.algorithm.toUpperCase(Locale.ROOT);
         String json = mapper.writeValueAsString(req.publicKey);
 
-        ConversationE2eeKey key = keys.findByConversation_IdAndOwnerUsernameAndAlgorithm(conversationId, me, alg)
+        ConversationE2eeKey key = keys
+                .findByConversationIdAndOwnerUsernameAndAlgorithm(conversationId, me, alg)
                 .orElse(null);
 
         if (key == null) {
@@ -65,17 +68,18 @@ public class E2eeController {
             @PathVariable Long conversationId,
             @RequestParam(defaultValue = "KYBER") String algorithm
     ) throws Exception {
-        List<ConversationE2eeKey> list = keys.findByConversation_Id(conversationId);
+        String alg = algorithm.toUpperCase(Locale.ROOT);
+        List<ConversationE2eeKey> list = keys.findByConversationId(conversationId);
 
         Map<String, Map<String, Object>> out = new HashMap<>();
         for (ConversationE2eeKey k : list) {
-            if (!algorithm.equalsIgnoreCase(k.getAlgorithm())) continue;
+            if (!alg.equalsIgnoreCase(k.getAlgorithm())) continue;
             Map<String, Object> pk = mapper.readValue(k.getPublicKeyJson(), new TypeReference<Map<String, Object>>() {});
             out.put(k.getOwnerUsername(), pk);
         }
 
         E2eeDtos.GetKeysResponse res = new E2eeDtos.GetKeysResponse();
-        res.algorithm = algorithm;
+        res.algorithm = alg;
         res.keysByUser = out;
         return res;
     }
@@ -86,10 +90,12 @@ public class E2eeController {
             @RequestBody E2eeDtos.SendKemRequest req,
             Principal principal
     ) throws Exception {
+        if (principal == null) throw new RuntimeException("Unauthenticated");
+
         String me = principal.getName();
         Conversation c = conversations.findById(conversationId).orElseThrow();
 
-        String alg = req.algorithm == null ? "KYBER" : req.algorithm;
+        String alg = (req.algorithm == null || req.algorithm.isBlank()) ? "KYBER" : req.algorithm.toUpperCase(Locale.ROOT);
         String ctJson = mapper.writeValueAsString(req.ciphertext);
 
         kem.save(new ConversationKemEnvelope(c, me, req.toUsername, alg, ctJson));
@@ -105,12 +111,16 @@ public class E2eeController {
             @RequestParam(defaultValue = "KYBER") String algorithm,
             Principal principal
     ) throws Exception {
+        if (principal == null) throw new RuntimeException("Unauthenticated");
+
         String me = principal.getName();
-        List<ConversationKemEnvelope> list = kem.findByConversation_IdAndToUsernameAndDeliveredFalse(conversationId, me);
+        String alg = algorithm.toUpperCase(Locale.ROOT);
+
+        List<ConversationKemEnvelope> list = kem.findByConversationIdAndToUsernameAndDeliveredFalse(conversationId, me);
 
         List<E2eeDtos.PendingKemItem> items = new ArrayList<>();
         for (ConversationKemEnvelope e : list) {
-            if (!algorithm.equalsIgnoreCase(e.getAlgorithm())) continue;
+            if (!alg.equalsIgnoreCase(e.getAlgorithm())) continue;
 
             Map<String, Object> ct = mapper.readValue(e.getCiphertextJson(), new TypeReference<Map<String, Object>>() {});
             E2eeDtos.PendingKemItem it = new E2eeDtos.PendingKemItem();
@@ -125,7 +135,7 @@ public class E2eeController {
         }
 
         E2eeDtos.PendingKemResponse res = new E2eeDtos.PendingKemResponse();
-        res.algorithm = algorithm;
+        res.algorithm = alg;
         res.pending = items;
         return res;
     }

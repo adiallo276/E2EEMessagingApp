@@ -11,14 +11,11 @@ export default function LoginPage() {
     try {
       setError(null);
 
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/login`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
-        }
-      );
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
 
       if (!res.ok) {
         const text = await res.text();
@@ -26,7 +23,9 @@ export default function LoginPage() {
       }
 
       const token = await res.text();
+
       localStorage.setItem("token", token);
+      localStorage.setItem("username", username);
 
       window.location.href = "/conversations";
     } catch (e: any) {
@@ -38,14 +37,11 @@ export default function LoginPage() {
     try {
       setError(null);
 
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/register`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
-        }
-      );
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
 
       if (!res.ok) {
         const text = await res.text();
@@ -69,7 +65,7 @@ export default function LoginPage() {
           className="border rounded w-full p-2"
           placeholder="Username"
           value={username}
-          onChange={e => setUsername(e.target.value)}
+          onChange={(e) => setUsername(e.target.value)}
         />
 
         <input
@@ -77,20 +73,14 @@ export default function LoginPage() {
           placeholder="Password"
           type="password"
           value={password}
-          onChange={e => setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.target.value)}
         />
 
-        <button
-          className="w-full bg-blue-600 text-white py-2 rounded"
-          onClick={handleLogin}
-        >
+        <button className="w-full bg-blue-600 text-white py-2 rounded" onClick={handleLogin}>
           Login
         </button>
 
-        <button
-          className="w-full bg-gray-200 text-black py-2 rounded"
-          onClick={handleRegister}
-        >
+        <button className="w-full bg-gray-200 text-black py-2 rounded" onClick={handleRegister}>
           Register
         </button>
       </div>

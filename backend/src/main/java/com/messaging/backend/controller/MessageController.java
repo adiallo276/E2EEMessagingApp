@@ -1,13 +1,8 @@
 package com.messaging.backend.controller;
 
 import com.messaging.backend.domain.Message;
-import com.messaging.backend.domain.Conversation;
-import com.messaging.backend.domain.User;
 import com.messaging.backend.repository.MessageRepository;
-import com.messaging.backend.repository.ConversationRepository;
-import com.messaging.backend.repository.UserRepository;
-
-import org.springframework.beans.factory.annotation.Autowired;
+import com.messaging.backend.websocket.dto.MessageDto;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -17,34 +12,30 @@ import java.util.List;
 @RequestMapping("/messages")
 public class MessageController {
 
-    @Autowired
-    private MessageRepository messages;
+    private final MessageRepository messages;
 
-    @Autowired
-    private ConversationRepository conversations;
-
-    @Autowired
-    private UserRepository users;
-
-    @PostMapping
-    public Message sendMessage(
-            @RequestParam Long conversationId,
-            @RequestParam String content,
-            Principal principal
-    ) {
-        String username = principal.getName();
-        User sender = users.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        Conversation conversation = conversations.findById(conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
-
-        Message message = new Message(content, conversation, sender);
-        return messages.save(message);
+    public MessageController(MessageRepository messages) {
+        this.messages = messages;
     }
 
     @GetMapping("/{conversationId}")
-    public List<Message> getMessages(@PathVariable Long conversationId) {
-        return messages.findByConversationId(conversationId);
+    public List<MessageDto> byConversation(@PathVariable Long conversationId, Principal principal) {
+        return messages.findByConversationId(conversationId)
+                .stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    private MessageDto toDto(Message m) {
+        MessageDto d = new MessageDto();
+        d.id = m.getId();
+        d.conversationId = m.getConversation().getId();
+        d.senderUsername = m.getSender().getUsername();
+        d.content = m.getContent();
+        d.e2ee = m.isE2ee();
+        d.ivB64 = m.getIvB64();
+        d.ciphertextB64 = m.getCiphertextB64();
+        d.timestamp = m.getTimestamp();
+        return d;
     }
 }

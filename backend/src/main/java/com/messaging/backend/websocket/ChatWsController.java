@@ -1,17 +1,15 @@
 package com.messaging.backend.websocket;
 
-import com.messaging.backend.domain.Conversation;
-import com.messaging.backend.domain.Message;
-import com.messaging.backend.domain.User;
+import com.messaging.backend.domain.*;
 import com.messaging.backend.repository.ConversationRepository;
 import com.messaging.backend.repository.MessageRepository;
 import com.messaging.backend.repository.UserRepository;
 import com.messaging.backend.websocket.dto.ChatMessageRequest;
+import com.messaging.backend.websocket.dto.MessageDto;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
-import java.time.Instant;
 import java.security.Principal;
 
 @Controller
@@ -36,9 +34,7 @@ public class ChatWsController {
 
     @MessageMapping("/chat.send")
     public void send(ChatMessageRequest req, Principal principal) {
-        if (principal == null) {
-            throw new RuntimeException("Unauthenticated STOMP session");
-        }
+        if (principal == null) throw new RuntimeException("Unauthenticated STOMP session");
 
         String username = principal.getName();
 
@@ -48,32 +44,29 @@ public class ChatWsController {
         Conversation conversation = conversations.findById(req.conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
-        Message saved = messages.save(new Message(req.content, conversation, sender));
+        if (!conversation.hasParticipant(username)) throw new RuntimeException("Forbidden");
 
-        ChatMessageResponse out = new ChatMessageResponse(
-                saved.getId(),
-                conversation.getId(),
-                saved.getContent(),
-                username,
-                saved.getTimestamp()
-        );
+        Message saved;
+        if (req.e2ee) {
+            if (conversation.getE2eeState() != E2eeState.ON) throw new RuntimeException("E2EE not enabled");
+            saved = messages.save(new Message(conversation, sender, req.ivB64, req.ciphertextB64));
+        } else {
+            saved = messages.save(new Message(conversation, sender, req.content));
+        }
 
-        broker.convertAndSend("/topic/conversations/" + conversation.getId(), out);
+        broker.convertAndSend("/topic/conversations/" + req.conversationId, toDto(saved));
     }
 
-    public static class ChatMessageResponse {
-        public Long id;
-        public Long conversationId;
-        public String content;
-        public String senderUsername;
-        public Instant timestamp;
-
-        public ChatMessageResponse(Long id, Long conversationId, String content, String senderUsername, Instant timestamp) {
-            this.id = id;
-            this.conversationId = conversationId;
-            this.content = content;
-            this.senderUsername = senderUsername;
-            this.timestamp = timestamp;
-        }
+    private MessageDto toDto(Message m) {
+        MessageDto d = new MessageDto();
+        d.id = m.getId();
+        d.conversationId = m.getConversation().getId();
+        d.senderUsername = m.getSender().getUsername();
+        d.content = m.getContent();
+        d.e2ee = m.isE2ee();
+        d.ivB64 = m.getIvB64();
+        d.ciphertextB64 = m.getCiphertextB64();
+        d.timestamp = m.getTimestamp();
+        return d;
     }
 }

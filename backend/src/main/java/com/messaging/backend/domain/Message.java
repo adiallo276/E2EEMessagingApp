@@ -4,29 +4,23 @@ import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
+@Table(name = "messages")
 public class Message {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String content;
-
-    @Lob
-    private String ciphertext;
-
-    private Instant timestamp = Instant.now();
-
-    @ManyToOne
-    @JoinColumn(name = "conversation_id")
+    @ManyToOne(optional = false)
     private Conversation conversation;
 
-    @ManyToOne
-    @JoinColumn(name = "sender_id")
+    @ManyToOne(optional = false)
     private User sender;
 
-    @Column(nullable = false)
-    private String senderUsername;
+    @Column(columnDefinition = "TEXT")
+    private String content;
+
+    private boolean e2ee;
 
     @Column(columnDefinition = "TEXT")
     private String ivB64;
@@ -34,60 +28,31 @@ public class Message {
     @Column(columnDefinition = "TEXT")
     private String ciphertextB64;
 
+    private Instant timestamp = Instant.now();
+
     public Message() {}
 
-    public Message(String content, Conversation conversation, User sender) {
-        this.content = content;
+    public Message(Conversation conversation, User sender, String content) {
         this.conversation = conversation;
         this.sender = sender;
-        this.timestamp = Instant.now();
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getContent() {
-        return content;
-    }
-
-    public String getCiphertext() {
-        return ciphertext;
-    }
-
-    public Instant getTimestamp() {
-        return timestamp;
-    }
-
-    public Conversation getConversation() {
-        return conversation;
-    }
-
-    public User getSender() {
-        return sender;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public void setContent(String content) {
         this.content = content;
+        this.e2ee = false;
     }
 
-    public void setCiphertext(String ciphertext) {
-        this.ciphertext = ciphertext;
-    }
-
-    public void setTimestamp(Instant timestamp) {
-        this.timestamp = timestamp;
-    }
-
-    public void setConversation(Conversation conversation) {
+    public Message(Conversation conversation, User sender, String ivB64, String ciphertextB64) {
         this.conversation = conversation;
+        this.sender = sender;
+        this.ivB64 = ivB64;
+        this.ciphertextB64 = ciphertextB64;
+        this.e2ee = true;
     }
 
-    public void setSender(User sender) {
-        this.sender = sender;
-    }
+    public Long getId() { return id; }
+    public Conversation getConversation() { return conversation; }
+    public User getSender() { return sender; }
+    public String getContent() { return content; }
+    public boolean isE2ee() { return e2ee; }
+    public String getIvB64() { return ivB64; }
+    public String getCiphertextB64() { return ciphertextB64; }
+    public Instant getTimestamp() { return timestamp; }
 }
