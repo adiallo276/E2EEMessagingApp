@@ -1,5 +1,8 @@
 "use client";
-
+import AppShell from "@/components/ui/app-shell";
+import ConversationsSidebar from "@/components/ui/conversations-sidebar";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
@@ -206,6 +209,10 @@ export default function MessagesPage() {
       setError(e?.message || "Failed to send");
     }
   }
+  
+  useEffect(() => {
+    localStorage.setItem(`e2ee_alg_v1:${conversationId}`, alg);
+  }, [alg, conversationId]);
 
   useEffect(() => {
     usernameRef.current = getUsername();
@@ -231,100 +238,135 @@ export default function MessagesPage() {
   }, [conversationId, e2eeEnabled]);
 
   return (
-    <div className="p-6 flex flex-col h-screen">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="font-bold">Conversation {conversationId}</h1>
+    <AppShell
+      sidebar={
+        <ConversationsSidebar
+          items={[
+            { id: 1, title: "admin", lastMessage: "yo", unread: 0 },
+            { id: 2, title: "test", lastMessage: "secure msg", unread: 3 },
+          ]}
+        />
+      }
+      header={
+        <div className="flex w-full items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="font-semibold">Conversation {conversationId}</div>
+            {e2eeEnabled && (
+              <div className="text-xs text-muted-foreground">
+                {e2eeReady ? "✅ Secure" : "⏳ Handshaking"}
+              </div>
+            )}
+          </div>
 
-        <div className="flex items-center gap-3">
-          <select
-            className="border rounded px-3 py-1"
-            value={alg}
-            disabled={e2eeEnabled}
-            onChange={(e) => {
-              const v = normAlg(e.target.value);
-              setAlg(v);
-              localStorage.setItem(`e2ee_alg_v1:${conversationId}`, v);
-            }}
-          >
-            <option value="kyber">Kyber</option>
-            <option value="frodo">Frodo</option>
-          </select>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">E2EE</span>
+              <Switch
+                checked={e2eeEnabled}
+                onCheckedChange={async (checked) => {
+                  const next = checked;
+                  setE2eeEnabled(next);
+                  if (!next) {
+                    setE2eeReady(false);
+                    return;
+                  }
+                  try {
+                    setError(null);
+                    setE2eeReady(hasSession(conversationId));
+                    if (!hasSession(conversationId)) {
+                      await startE2eeHandshake(alg); 
+                    }
+                  } catch (e: any) {
+                    setError(e?.message || "Failed to start E2EE");
+                  }
+                }}
+              />
+            </div>
 
-          <button
-            className="border rounded px-3 py-1"
-            onClick={async () => {
-              const next = !e2eeEnabled;
-              setE2eeEnabled(next);
+            {e2eeEnabled && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  clearSession(conversationId);
+                  setE2eeReady(false);
+                  setError("E2EE session cleared. Toggle ON to re-handshake.");
+                }}
+              >
+                Reset
+              </Button>
+            )}
+          </div>
+        </div>
+      }
+    >
+      <div className="flex h-full flex-col">
+        {error && (
+          <div className="px-4 py-2 text-sm text-red-500 border-b">
+            {error}
+          </div>
+        )}
 
-              if (!next) {
-                setE2eeReady(false);
-                return;
+        <div className="flex-1 overflow-hidden">
+          <div className="h-full overflow-auto p-4 space-y-3">
+            {messages.map((m) => {
+              const isMe = (m.senderUsername ?? "") === usernameRef.current;
+              return (
+                <div
+                  key={m.id}
+                  className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={[
+                      "max-w-[70%] rounded-2xl px-4 py-2 text-sm",
+                      isMe
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted",
+                    ].join(" ")}
+                  >
+                    <div className="mb-1 text-[11px] opacity-70">
+                      {m.senderUsername ?? "Unknown"}
+                    </div>
+                    <div className="whitespace-pre-wrap break-words">
+                      {m.displayContent}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="border-t p-3">
+          <div className="flex gap-2">
+            <textarea
+              className="flex-1 resize-none rounded-lg border bg-background p-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder={
+                e2eeEnabled
+                  ? e2eeReady
+                    ? "Message (secure)…"
+                    : "Handshake in progress…"
+                  : "Message…"
               }
-
-              try {
-                setError(null);
-                setE2eeReady(hasSession(conversationId));
-                if (!hasSession(conversationId)) {
-                  await startE2eeHandshake(alg);
+              rows={2}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
                 }
-              } catch (e: any) {
-                setError(e?.message || "Failed to start E2EE");
-              }
-            }}
-          >
-            {e2eeEnabled ? "E2EE: ON" : "E2EE: OFF"}
-          </button>
-
-          {e2eeEnabled && (
-            <button
-              className="border rounded px-3 py-1"
-              onClick={() => {
-                clearSession(conversationId);
-                setE2eeReady(false);
-                setError("E2EE session cleared. Toggle ON to re-handshake.");
               }}
-            >
-              Reset E2EE
-            </button>
-          )}
-
-          {e2eeEnabled && (
-            <span className="text-sm">{e2eeReady ? "✅ Secure" : "⏳ Handshaking"}</span>
-          )}
+            />
+            <Button onClick={send} className="h-[52px]">
+              Send
+            </Button>
+          </div>
+          <div className="mt-1 text-[11px] text-muted-foreground">
+            Tip: Enter sends • Shift+Enter new line
+          </div>
         </div>
       </div>
-
-      {error && <div className="text-red-600 mb-2">{error}</div>}
-
-      <div className="flex-1 border rounded p-3 mb-4 overflow-auto">
-        {messages.map((m) => (
-          <div key={m.id} className="mb-2">
-            <b>{m.senderUsername ?? "Unknown"}: </b>
-            {m.displayContent}
-          </div>
-        ))}
-      </div>
-
-      <div className="flex gap-2">
-        <input
-          className="border rounded flex-1 p-2"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder={
-            e2eeEnabled
-              ? e2eeReady
-                ? "Type a secure message..."
-                : "Handshake in progress..."
-              : "Type a message..."
-          }
-          onKeyDown={(e) => {
-            if (e.key === "Enter") send();
-          }}
-        />
-        <button className="bg-blue-600 text-white px-4 rounded" onClick={send}>
-          Send
-        </button>
-      </div>
-    </div>
+    </AppShell>
   );
 }
