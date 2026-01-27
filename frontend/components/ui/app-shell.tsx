@@ -1,36 +1,43 @@
 "use client";
 
-import { ReactNode } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+import ThemeToggle from "@/components/ui/theme-toggle";
 
 export default function AppShell({
-  sidebar,
   header,
+  sidebar,
   children,
 }: {
-  sidebar: ReactNode;
-  header: ReactNode;
-  children: ReactNode;
+  header?: React.ReactNode;
+  sidebar?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="h-screen w-screen bg-background text-foreground">
-      <div className="grid h-full grid-cols-[280px_1fr]">
-        <aside className="border-r bg-muted/20">
-          <div className="h-14 px-4 flex items-center font-semibold">
-            Q-Messaging
-          </div>
-          <Separator />
-          <ScrollArea className="h-[calc(100vh-3.5rem)]">
-            <div className="p-3">{sidebar}</div>
-          </ScrollArea>
+    <div className="flex h-screen bg-background text-foreground">
+      {/* Sidebar */}
+      {sidebar && (
+        <aside className="w-64 border-r border-border bg-sidebar">
+          {sidebar}
         </aside>
+      )}
 
-        <main className="flex h-full flex-col">
-          <div className="h-14 border-b bg-muted/10 flex items-center px-4">
+      {/* Main */}
+      <div className="flex flex-1 flex-col">
+        {/* Header */}
+        <header className="h-14 border-b border-border bg-background px-4 flex items-center justify-between">
+          {/* Left: page-specific header content */}
+          <div className="flex items-center gap-2">
             {header}
           </div>
-          <div className="flex-1 overflow-hidden">{children}</div>
+
+          {/* Right: GLOBAL CONTROLS */}
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+          </div>
+        </header>
+
+        {/* Page content */}
+        <main className="flex-1 overflow-hidden">
+          {children}
         </main>
       </div>
     </div>

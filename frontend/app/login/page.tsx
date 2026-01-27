@@ -66,11 +66,9 @@ export default function LoginPage() {
         throw new Error(text || "Register failed");
       }
 
-      // ✅ Clear inputs after successful register
       setUsername("");
       setPassword("");
 
-      // Optional: switch to login mode after registering
       setMode("login");
       setError("✅ Registered! Now log in.");
     } catch (e: any) {
@@ -89,20 +87,21 @@ export default function LoginPage() {
             <div className="h-10 w-10 rounded-xl bg-primary/20 border border-border grid place-items-center">
               <span className="text-sm font-bold">Q</span>
             </div>
-            <div className="font-semibold tracking-tight text-lg">Q-Messaging</div>
+            <div className="font-semibold tracking-tight text-lg">Post-Quantum Cryptograpic Algorithms</div>
           </div>
 
           <h2 className="mt-10 text-3xl font-semibold leading-tight">
-            Discord-style UI <span className="text-primary">+</span> E2EE toggle
+            PQC <span className="text-primary">+</span> E2EE toggle
           </h2>
           <p className="mt-3 text-muted-foreground max-w-md leading-relaxed">
-            Clean chat UX first. Then layer in MiniKyber / MiniFrodo as your story.
+            Messaging app that uses lattice-based post-quantum cryptographic algorithms to secure
+            your conversations.
           </p>
 
           <div className="mt-8 grid gap-3">
             <div className="rounded-xl border border-border bg-background p-4 text-sm">
               <div className="font-medium">Realtime messaging</div>
-              <div className="text-muted-foreground mt-1">STOMP/WebSockets</div>
+              <div className="text-muted-foreground mt-1">WebSockets</div>
             </div>
             <div className="rounded-xl border border-border bg-background p-4 text-sm">
               <div className="font-medium">End-to-end encryption</div>
@@ -110,13 +109,13 @@ export default function LoginPage() {
             </div>
             <div className="rounded-xl border border-border bg-background p-4 text-sm">
               <div className="font-medium">PQC-ready architecture</div>
-              <div className="text-muted-foreground mt-1">Swap KEM later</div>
+              <div className="text-muted-foreground mt-1">Mini-Kyber and Mini-Frodo</div>
             </div>
           </div>
         </div>
 
         <div className="text-xs text-muted-foreground">
-          Built for your FYP • Local dev • Dark theme enabled
+          Built by Abdoulahi Diallo
         </div>
       </div>
 
@@ -182,7 +181,7 @@ export default function LoginPage() {
           </div>
 
           <div className="mt-6 text-[11px] text-muted-foreground">
-            By continuing you agree this is a university project demo environment.
+            This is a demo app for a project. Do not use real credentials.
           </div>
         </div>
       </div>

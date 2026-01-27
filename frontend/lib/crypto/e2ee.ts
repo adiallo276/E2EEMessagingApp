@@ -8,25 +8,25 @@ import {
   MiniKyberCiphertext,
 } from "@/lib/crypto/minikyber";
 
- import {
-   miniFrodoKeyGen,
-   miniFrodoEncapsulate,
-   miniFrodoDecapsulate,
-   MiniFrodoKeyPair,
-   MiniFrodoPublicKey,
+import {
+  miniFrodoKeyGen,
+  miniFrodoEncapsulate,
+  miniFrodoDecapsulate,
+  MiniFrodoKeyPair,
+  MiniFrodoPublicKey,
   MiniFrodoCiphertext,
 } from "@/lib/crypto/minifrodo";
 
 export type KemAlg = "kyber" | "frodo";
 
-type E2eeHello = {
+export type E2eeHello = {
   type: "E2EE_HELLO";
   v: 1;
   alg: KemAlg;
   pk: any;
 };
 
-type E2eeKey = {
+export type E2eeKey = {
   type: "E2EE_KEY";
   v: 1;
   alg: KemAlg;
@@ -35,7 +35,7 @@ type E2eeKey = {
   infoB64: string;
 };
 
-type E2eeMsg = {
+export type E2eeMsg = {
   type: "E2EE_MSG";
   v: 1;
   ivB64: string;
@@ -126,10 +126,9 @@ export async function getOrCreateKeyPair(username: string, alg: KemAlg): Promise
   }
 
   if (alg === "frodo") {
-    throw new Error("MiniFrodo TS not implemented yet");
-     const kp = await miniFrodoKeyGen();
-     localStorage.setItem(storageKey, JSON.stringify(kp));
-     return kp;
+    const kp = await miniFrodoKeyGen();
+    localStorage.setItem(storageKey, JSON.stringify(kp));
+    return kp;
   }
 
   throw new Error("Unknown KEM alg");
@@ -160,10 +159,9 @@ export async function handleHelloAndCreateKeyReply(
   }
 
   if (hello.alg === "frodo") {
-    throw new Error("MiniFrodo TS not implemented yet");
-     const enc = await miniFrodoEncapsulate(hello.pk as MiniFrodoPublicKey);
-     await saveSessionFromSharedSecret(conversationId, "frodo", enc.sharedSecret, salt, info);
-     return { replyContent: makeKeyReply("frodo", enc.ct as MiniFrodoCiphertext, salt, info) };
+    const enc = await miniFrodoEncapsulate(hello.pk as MiniFrodoPublicKey);
+    await saveSessionFromSharedSecret(conversationId, "frodo", enc.sharedSecret, salt, info);
+    return { replyContent: makeKeyReply("frodo", enc.ct as MiniFrodoCiphertext, salt, info) };
   }
 
   return null;
@@ -181,11 +179,10 @@ export async function handleKeyAndStoreSession(conversationId: string, myUsernam
   }
 
   if (keyMsg.alg === "frodo") {
-    throw new Error("MiniFrodo TS not implemented yet");
-     const kp = (await getOrCreateKeyPair(myUsername, "frodo")) as MiniFrodoKeyPair;
-     const ss = await miniFrodoDecapsulate(kp.sk, keyMsg.ct as MiniFrodoCiphertext);
-     await saveSessionFromSharedSecret(conversationId, "frodo", ss, salt, info);
-     return;
+    const kp = (await getOrCreateKeyPair(myUsername, "frodo")) as MiniFrodoKeyPair;
+    const ss = await miniFrodoDecapsulate(kp.sk, keyMsg.ct as MiniFrodoCiphertext);
+    await saveSessionFromSharedSecret(conversationId, "frodo", ss, salt, info);
+    return;
   }
 
   throw new Error("Unknown KEM alg");

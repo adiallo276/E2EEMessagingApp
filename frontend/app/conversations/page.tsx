@@ -1,102 +1,203 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import ThemeToggle from "@/components/ui/theme-toggle";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 
 type Conversation = {
   id: number;
+  user1?: { username?: string };
+  user2?: { username?: string };
 };
 
 export default function ConversationsPage() {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [user2, setUser2] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
-  async function load() {
-    const data = await api("/conversations/me");
-    setConversations(data);
-  }
+  const [mounted, setMounted] = useState(false);
+  const [username, setUsername] = useState<string>("");
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const [newUser, setNewUser] = useState("");
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    load().catch((e: any) => {
-      setError(e.message || "Failed to load conversations");
-      if (String(e.message).includes("401")) window.location.href = "/login";
-    });
-  }, []);
+    setMounted(true);
+
+    const token = localStorage.getItem("token");
+    const u = localStorage.getItem("username") || "";
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    setUsername(u);
+
+    (async () => {
+      try {
+        const data = await api("/conversations/me");
+        setConversations(data);
+      } catch (e: any) {
+        setError(e?.message || "Failed to load conversations");
+        if (String(e?.message).includes("401")) router.replace("/login");
+      }
+    })();
+  }, [router]);
+
+  if (!mounted) return null;
+
+  function otherUser(c: Conversation) {
+    const u1 = c.user1?.username || "";
+    const u2 = c.user2?.username || "";
+    if (!username) return u1 || u2 || "Unknown";
+    return u1 === username ? u2 : u1;
+  }
 
   async function createConversation() {
-    if (!user2.trim()) return;
+    const u = newUser.trim();
+    if (!u) return;
+
+    setCreating(true);
+    setError(null);
 
     try {
-      setLoading(true);
-      setError(null);
-
-      const created = await api(`/conversations?user2=${encodeURIComponent(user2)}`, {
+      // matches your backend: @PostMapping public Conversation createConversation(@RequestParam String user2, Principal principal)
+      const created = await api(`/conversations?user2=${encodeURIComponent(u)}`, {
         method: "POST",
       });
 
-      setUser2("");
-      await load();
+      setNewUser("");
 
-      window.location.href = `/messages/${created.id}`;
+      // refresh list so it appears immediately
+      const updated = await api("/conversations/me");
+      setConversations(updated);
+
+      // go to chat
+      router.push(`/messages/${created.id}`);
     } catch (e: any) {
-      setError(e.message || "Failed to create conversation");
+      setError(e?.message || "Failed to start conversation");
     } finally {
-      setLoading(false);
+      setCreating(false);
     }
   }
 
-  function logout() {
-    localStorage.removeItem("token");
-    window.location.href = "/login";
-  }
-
   return (
-    <div className="p-6 max-w-xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold">Your Conversations</h1>
-        <button onClick={logout} className="text-sm underline">
-          Logout
-        </button>
-      </div>
-
-      <div className="border rounded p-3 mb-4">
-        <div className="font-semibold mb-2">Start a new chat</div>
-        <div className="flex gap-2">
-          <input
-            className="border rounded flex-1 p-2"
-            placeholder="Enter username (e.g. someone123)"
-            value={user2}
-            onChange={e => setUser2(e.target.value)}
-          />
-          <button
-            className="bg-blue-600 text-white px-4 rounded disabled:opacity-60"
-            onClick={createConversation}
-            disabled={loading}
-          >
-            Start
-          </button>
-        </div>
-      </div>
-
-      {error && <div className="text-red-600 mb-3">{error}</div>}
-
-      {conversations.length === 0 ? (
-        <div className="text-gray-600">No conversations yet. Start one above.</div>
-      ) : (
-        <div className="space-y-2">
-          {conversations.map(c => (
-            <div
-              key={c.id}
-              className="border p-3 rounded cursor-pointer hover:bg-slate-100"
-              onClick={() => (window.location.href = `/messages/${c.id}`)}
-            >
-              Conversation #{c.id}
+    <main className="min-h-screen bg-background text-foreground">
+      {/* Header */}
+      <div className="mx-auto max-w-6xl px-6 py-6 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="h-9 w-9 rounded-xl bg-primary/20 border border-border grid place-items-center">
+            <span className="text-sm font-bold">Q</span>
+          </div>
+          <div>
+            <div className="font-semibold tracking-tight leading-tight">Q-Messaging</div>
+            <div className="text-xs text-muted-foreground">
+              {username ? `Signed in as ${username}` : "Secure chat • Optional E2EE • PQC-ready"}
             </div>
-          ))}
+          </div>
         </div>
-      )}
-    </div>
+
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <Button
+            variant="outline"
+            onClick={() => {
+              localStorage.removeItem("token");
+              localStorage.removeItem("username");
+              router.replace("/login");
+            }}
+          >
+            Logout
+          </Button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="mx-auto max-w-6xl px-6 pb-12">
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            {error}
+          </div>
+        )}
+
+        <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+          {/* Left card: conversations */}
+          <div className="rounded-2xl border border-border bg-card overflow-hidden">
+            <div className="p-4 border-b border-border">
+              <div className="font-medium">Conversations</div>
+              <div className="text-xs text-muted-foreground">Click one to open</div>
+            </div>
+
+            <div className="p-3 space-y-2">
+              {conversations.length === 0 ? (
+                <div className="text-sm text-muted-foreground px-2 py-6">
+                  No conversations yet. Start one using the form.
+                </div>
+              ) : (
+                conversations.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => router.push(`/messages/${c.id}`)}
+                    className="w-full text-left rounded-xl border border-border bg-background/40 hover:bg-background px-3 py-3 transition"
+                  >
+                    <div className="text-sm font-medium">{otherUser(c)}</div>
+                    <div className="text-xs text-muted-foreground">Conversation #{c.id}</div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Right card: new conversation */}
+          <div className="rounded-2xl border border-border bg-card overflow-hidden">
+            <div className="p-4 border-b border-border">
+              <div className="font-medium">Start a new conversation</div>
+              <div className="text-xs text-muted-foreground">
+                Enter the other user’s username (must already be registered)
+              </div>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <input
+                className="w-full rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                placeholder="e.g. admin"
+                value={newUser}
+                onChange={(e) => setNewUser(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") createConversation();
+                }}
+              />
+
+              <div className="flex gap-2">
+                <Button onClick={createConversation} disabled={creating}>
+                  {creating ? "Creating..." : "Create & open"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      setError(null);
+                      const updated = await api("/conversations/me");
+                      setConversations(updated);
+                    } catch (e: any) {
+                      setError(e?.message || "Failed to refresh");
+                    }
+                  }}
+                >
+                  Refresh
+                </Button>
+              </div>
+
+              <div className="rounded-xl border border-border bg-background p-3 text-xs text-muted-foreground">
+                Tip: for your demo, make two accounts in two browsers (Safari + Chrome) so localStorage doesn’t clash.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
