@@ -105,7 +105,7 @@ export default function LoginPage() {
             </div>
             <div className="rounded-xl border border-border bg-background p-4 text-sm">
               <div className="font-medium">End-to-end encryption</div>
-              <div className="text-muted-foreground mt-1">Per conversation toggle</div>
+              <div className="text-muted-foreground mt-1">Per conversation</div>
             </div>
             <div className="rounded-xl border border-border bg-background p-4 text-sm">
               <div className="font-medium">PQC-ready architecture</div>

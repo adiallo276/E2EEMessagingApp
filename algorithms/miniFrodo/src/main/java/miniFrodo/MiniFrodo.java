@@ -1,7 +1,7 @@
 package miniFrodo;
 /*
 * CREATED: 02/12/2025
-* LAST UPDATED: 22/12/2025
+* LAST UPDATED: 26/12/2025
 * PURPOSE: MiniFrodo: a toy LWE-based KEM using small matrices over Z_q. Further notes below
 */
 
@@ -81,14 +81,12 @@ public class MiniFrodo {
     }
 
     public static MiniFrodoKeyPair keyGen() {
-        // A: n x n uniform
         Matrix A = Matrix.randomUniform(N, N, rnd);
 
         // S, E: n x 1 small
         Matrix S = Matrix.randomSmall(N, 1, rnd);
         Matrix E = Matrix.randomSmall(N, 1, rnd);
 
-        // B = A*S + E (all mod q)
         Matrix B = A.mul(S).add(E);
 
         return new MiniFrodoKeyPair(A, B, S);
