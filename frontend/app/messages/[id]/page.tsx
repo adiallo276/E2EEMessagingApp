@@ -52,12 +52,6 @@ type SidebarItem = {
   unread?: number;
 };
 
-function normAlg(a: any): KemAlg {
-  const v = String(a || "").toLowerCase();
-  if (v === "kyber" || v === "frodo") return v;
-  return "kyber";
-}
-
 export default function MessagesPage() {
   const params = useParams();
   const router = useRouter();
@@ -67,13 +61,17 @@ export default function MessagesPage() {
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const [e2eeEnabled, setE2eeEnabled] = useState<boolean>(false);
+  const [e2eeEnabled, setE2eeEnabled] = useState<boolean>(true); // Default ON
   const [e2eeReady, setE2eeReady] = useState<boolean>(false);
   const [alg, setAlg] = useState<KemAlg>("kyber");
+  const [algLocked, setAlgLocked] = useState<boolean>(false);
   
   const [pendingInvite, setPendingInvite] = useState<PendingInvite | null>(null);
   const [conversations, setConversations] = useState<SidebarItem[]>([]);
   const [otherUsername, setOtherUsername] = useState<string>("");
+  
+  // Warning dialog for turning off E2EE
+  const [showDisableWarning, setShowDisableWarning] = useState<boolean>(false);
 
   const clientRef = useRef<Client | null>(null);
   const subRef = useRef<StompSubscription | null>(null);
@@ -82,6 +80,12 @@ export default function MessagesPage() {
 
   function getUsername(): string {
     return localStorage.getItem("username") || localStorage.getItem("user") || "";
+  }
+
+  function getLockedAlg(): KemAlg | null {
+    const stored = localStorage.getItem(`e2ee_alg_locked:${conversationId}`);
+    if (stored === "kyber" || stored === "frodo") return stored;
+    return null;
   }
 
   async function loadConversations() {
@@ -169,8 +173,21 @@ export default function MessagesPage() {
       setMessages(decorated);
       
       const myUsername = getUsername();
+      
+      // Check existing messages for algorithm info
       for (const m of data) {
         const env = tryParseEnvelope(m.content);
+        
+        // If we find an E2EE_HELLO or E2EE_KEY, lock the algorithm
+        if (env?.type === "E2EE_HELLO" || env?.type === "E2EE_KEY") {
+          if (!getLockedAlg()) {
+            localStorage.setItem(`e2ee_alg_locked:${conversationId}`, env.alg);
+            setAlg(env.alg);
+            setAlgLocked(true);
+          }
+        }
+        
+        // Check for pending invite (E2EE_HELLO from other user with no KEY response)
         if (env?.type === "E2EE_HELLO" && m.senderUsername !== myUsername && !hasSession(conversationId)) {
           const hasKeyResponse = data.some(msg => {
             const e = tryParseEnvelope(msg.content);
@@ -214,6 +231,13 @@ export default function MessagesPage() {
         if (env) {
           if (env.type === "E2EE_HELLO" && incoming.senderUsername !== myUsername) {
             if (!hasSession(conversationId)) {
+              // Lock the algorithm based on what the other user chose
+              if (!getLockedAlg()) {
+                localStorage.setItem(`e2ee_alg_locked:${conversationId}`, env.alg);
+                setAlg(env.alg);
+                setAlgLocked(true);
+              }
+              
               setPendingInvite({
                 fromUsername: incoming.senderUsername || "Unknown",
                 alg: env.alg,
@@ -300,6 +324,9 @@ export default function MessagesPage() {
         setE2eeReady(true);
         setPendingInvite(null);
         
+        // Save E2EE enabled state
+        localStorage.setItem(`e2ee_enabled:${conversationId}`, "true");
+        
         showDecryptedMessages();
       }
     } catch (e: any) {
@@ -350,6 +377,8 @@ export default function MessagesPage() {
   async function handleE2eeToggle(checked: boolean) {
     if (checked) {
       setE2eeEnabled(true);
+      localStorage.setItem(`e2ee_enabled:${conversationId}`, "true");
+      
       if (hasSession(conversationId)) {
         setE2eeReady(true);
         showDecryptedMessages();
@@ -362,40 +391,66 @@ export default function MessagesPage() {
         }
       }
     } else {
-      setE2eeEnabled(false);
-      setE2eeReady(false);
-      hideEncryptedMessages();
+      // Show warning before disabling
+      setShowDisableWarning(true);
     }
+  }
+
+  function confirmDisableE2ee() {
+    setE2eeEnabled(false);
+    setE2eeReady(false);
+    localStorage.setItem(`e2ee_enabled:${conversationId}`, "false");
+    setShowDisableWarning(false);
+    hideEncryptedMessages();
   }
 
   function handleReset() {
     clearSession(conversationId);
-    setE2eeEnabled(false);
     setE2eeReady(false);
     setPendingInvite(null);
-    hideEncryptedMessages();
+    
+    // If E2EE is still enabled, restart handshake
+    if (e2eeEnabled) {
+      startE2eeHandshake(alg).catch((e) => {
+        setError(e?.message || "Failed to restart encryption");
+      });
+    } else {
+      hideEncryptedMessages();
+    }
   }
 
-  useEffect(() => {
-    localStorage.setItem(`e2ee_alg_v1:${conversationId}`, alg);
-  }, [alg, conversationId]);
-
+  // Initialize conversation state
   useEffect(() => {
     if (!conversationId) return;
 
+    // Reset state
     setMessages([]);
     setError(null);
     setPendingInvite(null);
     setOtherUsername("");
+    setShowDisableWarning(false);
     rawMessagesRef.current = [];
     usernameRef.current = getUsername();
     
-    setAlg(normAlg(localStorage.getItem(`e2ee_alg_v1:${conversationId}`) || "kyber"));
+    // Load locked algorithm or default to kyber
+    const lockedAlg = getLockedAlg();
+    if (lockedAlg) {
+      setAlg(lockedAlg);
+      setAlgLocked(true);
+    } else {
+      setAlg("kyber");
+      setAlgLocked(false);
+    }
+    
+    // Load E2EE enabled preference (default to true for new conversations)
+    const e2eeEnabledStored = localStorage.getItem(`e2ee_enabled:${conversationId}`);
+    const shouldEnableE2ee = e2eeEnabledStored !== "false"; // Default to true
     
     const sessionExists = hasSession(conversationId);
-    setE2eeEnabled(sessionExists);
-    setE2eeReady(sessionExists);
+    setE2eeEnabled(shouldEnableE2ee);
+    setE2eeReady(sessionExists && shouldEnableE2ee);
 
+    // Load data
     loadConversations();
     loadInitialMessages();
     connectSocket();
@@ -410,6 +465,15 @@ export default function MessagesPage() {
     };
   }, [conversationId]);
 
+  // Auto-start handshake when E2EE is enabled but no session exists
+  useEffect(() => {
+    if (e2eeEnabled && !e2eeReady && !hasSession(conversationId) && !pendingInvite && clientRef.current?.connected) {
+      startE2eeHandshake(alg).catch((e) => {
+        console.error("Auto-handshake failed:", e);
+      });
+    }
+  }, [e2eeEnabled, e2eeReady, conversationId, alg, pendingInvite]);
+
   const algDisplayName = alg === "kyber" ? "Kyber" : "Frodo";
 
   return (
@@ -419,32 +483,33 @@ export default function MessagesPage() {
         <div className="flex w-full items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="font-semibold">{otherUsername || `Conversation ${conversationId}`}</div>
+            
+            {/* Algorithm badge - only show when locked */}
+            {algLocked && (
+              <div className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                {algDisplayName}
+              </div>
+            )}
+            
+            {/* Status badge */}
             {e2eeEnabled && (
               <div className={`text-xs px-2 py-0.5 rounded-full ${
                 e2eeReady 
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
                   : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
               }`}>
-                {e2eeReady ? `Encrypted · ${algDisplayName}` : "Connecting..."}
+                {e2eeReady ? "Encrypted" : "Connecting..."}
+              </div>
+            )}
+            
+            {!e2eeEnabled && (
+              <div className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
+                Not encrypted
               </div>
             )}
           </div>
 
           <div className="flex items-center gap-3">
-            {!e2eeEnabled && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">Algorithm:</span>
-                <select
-                  value={alg}
-                  onChange={(e) => setAlg(e.target.value as KemAlg)}
-                  className="h-7 rounded-md border border-border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="kyber">Kyber</option>
-                  <option value="frodo">Frodo</option>
-                </select>
-              </div>
-            )}
-
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">E2EE</span>
               <Switch
@@ -467,6 +532,50 @@ export default function MessagesPage() {
       }
     >
       <div className="flex h-full flex-col">
+        {/* Disable E2EE Warning Dialog */}
+        {showDisableWarning && (
+          <div className="border-b border-border bg-red-500/5">
+            <div className="px-4 py-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500/20 text-red-600 dark:text-red-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 9v4"/>
+                      <path d="M12 17h.01"/>
+                      <path d="M3.586 20.414A2 2 0 0 0 5 21h14a2 2 0 0 0 1.414-.586l.001-.001A2 2 0 0 0 21 19V5a2 2 0 0 0-.586-1.414A2 2 0 0 0 19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 .586 1.414z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">
+                      Turn off encryption?
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      New messages will be sent without encryption and can be read by the server.
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowDisableWarning(false)}
+                    className="text-xs"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={confirmDisableE2ee}
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs"
+                  >
+                    Turn off
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* E2EE Invitation Banner */}
         {pendingInvite && (
           <div className="border-b border-border bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent">
@@ -518,7 +627,7 @@ export default function MessagesPage() {
         )}
 
         {/* Waiting Banner */}
-        {e2eeEnabled && !e2eeReady && !pendingInvite && (
+        {e2eeEnabled && !e2eeReady && !pendingInvite && !showDisableWarning && (
           <div className="px-4 py-2 text-sm text-muted-foreground border-b bg-muted/30 flex items-center gap-2">
             <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -571,7 +680,7 @@ export default function MessagesPage() {
                   ? e2eeReady
                     ? "Write a message..."
                     : "Waiting for encryption..."
-                  : "Write a message..."
+                  : "Write a message (not encrypted)..."
               }
               disabled={e2eeEnabled && !e2eeReady}
               rows={2}
@@ -592,8 +701,10 @@ export default function MessagesPage() {
           </div>
           <div className="mt-1 text-[11px] text-muted-foreground">
             {e2eeEnabled && e2eeReady 
-              ? `Messages are encrypted with ${algDisplayName}` 
-              : "Press Enter to send"}
+              ? `Messages are encrypted${algLocked ? ` with ${algDisplayName}` : ""}` 
+              : e2eeEnabled 
+                ? "Encryption in progress..."
+                : "Messages are not encrypted"}
           </div>
         </div>
       </div>

@@ -12,6 +12,8 @@ type Conversation = {
   user2?: { username?: string };
 };
 
+type KemAlg = "kyber" | "frodo";
+
 export default function ConversationsPage() {
   const router = useRouter();
 
@@ -21,6 +23,7 @@ export default function ConversationsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [newUser, setNewUser] = useState("");
+  const [selectedAlg, setSelectedAlg] = useState<KemAlg>("kyber");
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -56,6 +59,12 @@ export default function ConversationsPage() {
     return u1 === username ? u2 : u1;
   }
 
+  function getConversationAlg(convId: number): KemAlg | null {
+    const stored = localStorage.getItem(`e2ee_alg_locked:${convId}`);
+    if (stored === "kyber" || stored === "frodo") return stored;
+    return null;
+  }
+
   async function createConversation() {
     const u = newUser.trim();
     if (!u) return;
@@ -64,18 +73,21 @@ export default function ConversationsPage() {
     setError(null);
 
     try {
-      // matches your backend: @PostMapping public Conversation createConversation(@RequestParam String user2, Principal principal)
       const created = await api(`/conversations?user2=${encodeURIComponent(u)}`, {
         method: "POST",
       });
 
+      // Lock the algorithm choice for this conversation
+      localStorage.setItem(`e2ee_alg_locked:${created.id}`, selectedAlg);
+      
+      // Also set E2EE to default ON for new conversations
+      localStorage.setItem(`e2ee_enabled:${created.id}`, "true");
+
       setNewUser("");
 
-      // refresh list so it appears immediately
       const updated = await api("/conversations/me");
       setConversations(updated);
 
-      // go to chat
       router.push(`/messages/${created.id}`);
     } catch (e: any) {
       setError(e?.message || "Failed to start conversation");
@@ -95,7 +107,7 @@ export default function ConversationsPage() {
           <div>
             <div className="font-semibold tracking-tight leading-tight">Q-Messaging</div>
             <div className="text-xs text-muted-foreground">
-              {username ? `Signed in as ${username}` : "Secure chat • Optional E2EE • PQC-ready"}
+              {username ? `Signed in as ${username}` : "Secure chat · Post-quantum encryption"}
             </div>
           </div>
         </div>
@@ -137,16 +149,28 @@ export default function ConversationsPage() {
                   No conversations yet. Start one using the form.
                 </div>
               ) : (
-                conversations.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => router.push(`/messages/${c.id}`)}
-                    className="w-full text-left rounded-xl border border-border bg-background/40 hover:bg-background px-3 py-3 transition"
-                  >
-                    <div className="text-sm font-medium">{otherUser(c)}</div>
-                    <div className="text-xs text-muted-foreground">Conversation #{c.id}</div>
-                  </button>
-                ))
+                conversations.map((c) => {
+                  const alg = getConversationAlg(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => router.push(`/messages/${c.id}`)}
+                      className="w-full text-left rounded-xl border border-border bg-background/40 hover:bg-background px-3 py-3 transition"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium">{otherUser(c)}</div>
+                        {alg && (
+                          <div className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                            {alg === "kyber" ? "Kyber" : "Frodo"}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Conversation #{c.id}
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
           </div>
@@ -156,24 +180,75 @@ export default function ConversationsPage() {
             <div className="p-4 border-b border-border">
               <div className="font-medium">Start a new conversation</div>
               <div className="text-xs text-muted-foreground">
-                Enter the other user’s username (must already be registered)
+                Choose a user and encryption algorithm
               </div>
             </div>
 
-            <div className="p-4 space-y-3">
-              <input
-                className="w-full rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                placeholder="e.g. admin"
-                value={newUser}
-                onChange={(e) => setNewUser(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") createConversation();
-                }}
-              />
+            <div className="p-4 space-y-4">
+              {/* Username input */}
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                  Username
+                </label>
+                <input
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Enter username"
+                  value={newUser}
+                  onChange={(e) => setNewUser(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") createConversation();
+                  }}
+                />
+              </div>
 
-              <div className="flex gap-2">
-                <Button onClick={createConversation} disabled={creating}>
-                  {creating ? "Creating..." : "Create & open"}
+              {/* Algorithm selection */}
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                  Encryption Algorithm
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAlg("kyber")}
+                    className={`rounded-lg border px-3 py-3 text-left transition ${
+                      selectedAlg === "kyber"
+                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        : "border-border bg-background hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className="text-sm font-medium">Kyber</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Ring-LWE based · Faster
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAlg("frodo")}
+                    className={`rounded-lg border px-3 py-3 text-left transition ${
+                      selectedAlg === "frodo"
+                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        : "border-border bg-background hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className="text-sm font-medium">Frodo</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Standard LWE · Conservative
+                    </div>
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  This cannot be changed after the conversation is created.
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-2">
+                <Button 
+                  onClick={createConversation} 
+                  disabled={creating || !newUser.trim()}
+                  className="flex-1"
+                >
+                  {creating ? "Creating..." : "Start conversation"}
                 </Button>
                 <Button
                   variant="outline"
@@ -189,10 +264,6 @@ export default function ConversationsPage() {
                 >
                   Refresh
                 </Button>
-              </div>
-
-              <div className="rounded-xl border border-border bg-background p-3 text-xs text-muted-foreground">
-                Tip: for your demo, make two accounts in two browsers (Safari + Chrome) so localStorage doesn’t clash.
               </div>
             </div>
           </div>
