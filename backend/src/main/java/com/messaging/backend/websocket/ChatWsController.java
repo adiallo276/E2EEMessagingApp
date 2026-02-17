@@ -6,6 +6,8 @@ import com.messaging.backend.repository.MessageRepository;
 import com.messaging.backend.repository.UserRepository;
 import com.messaging.backend.websocket.dto.ChatMessageRequest;
 import com.messaging.backend.websocket.dto.MessageDto;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
@@ -14,6 +16,8 @@ import java.security.Principal;
 
 @Controller
 public class ChatWsController {
+
+    private static final Logger log = LoggerFactory.getLogger(ChatWsController.class);
 
     private final MessageRepository messages;
     private final ConversationRepository conversations;
@@ -34,27 +38,50 @@ public class ChatWsController {
 
     @MessageMapping("/chat.send")
     public void send(ChatMessageRequest req, Principal principal) {
-        if (principal == null) throw new RuntimeException("Unauthenticated STOMP session");
+        log.info("[ChatWs] Received message for conversation {}, content length: {}", 
+                 req.conversationId, req.content != null ? req.content.length() : 0);
+        
+        if (principal == null) {
+            log.error("[ChatWs] Unauthenticated STOMP session");
+            throw new RuntimeException("Unauthenticated STOMP session");
+        }
 
         String username = principal.getName();
+        log.info("[ChatWs] Sender: {}", username);
 
         User sender = users.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> {
+                    log.error("[ChatWs] User not found: {}", username);
+                    return new RuntimeException("User not found");
+                });
 
         Conversation conversation = conversations.findById(req.conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> {
+                    log.error("[ChatWs] Conversation not found: {}", req.conversationId);
+                    return new RuntimeException("Conversation not found");
+                });
 
-        if (!conversation.hasParticipant(username)) throw new RuntimeException("Forbidden");
+        if (!conversation.hasParticipant(username)) {
+            log.error("[ChatWs] User {} is not a participant of conversation {}", username, req.conversationId);
+            throw new RuntimeException("Forbidden");
+        }
 
         Message saved;
         if (req.e2ee) {
-            if (conversation.getE2eeState() != E2eeState.ON) throw new RuntimeException("E2EE not enabled");
+            if (conversation.getE2eeState() != E2eeState.ON) {
+                log.error("[ChatWs] E2EE not enabled for conversation {}", req.conversationId);
+                throw new RuntimeException("E2EE not enabled");
+            }
             saved = messages.save(new Message(conversation, sender, req.ivB64, req.ciphertextB64));
         } else {
             saved = messages.save(new Message(conversation, sender, req.content));
         }
+        
+        log.info("[ChatWs] Message saved with id {}, broadcasting to /topic/conversations/{}", 
+                 saved.getId(), req.conversationId);
 
         broker.convertAndSend("/topic/conversations/" + req.conversationId, toDto(saved));
+        log.info("[ChatWs] Message broadcast complete");
     }
 
     private MessageDto toDto(Message m) {
