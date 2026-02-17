@@ -421,6 +421,223 @@ export async function benchmarkedDecryptChatMessage(
   };
 }
 
+// ============ KEM Benchmark Runner ============
+
+export type TimingStats = {
+  avg: number;
+  min: number;
+  max: number;
+  stdDev: number;
+  samples: number[];
+};
+
+export type AlgorithmResults = {
+  keyGen: TimingStats;
+  encapsulate: TimingStats;
+  decapsulate: TimingStats;
+  sizes: {
+    publicKey: number;
+    secretKey: number;
+    ciphertext: number;
+    sharedSecret: number;
+  };
+};
+
+export type BenchmarkResults = {
+  iterations: number;
+  timestamp: number;
+  kyber: AlgorithmResults;
+  frodo: AlgorithmResults;
+};
+
+function calculateStats(samples: number[]): TimingStats {
+  const n = samples.length;
+  if (n === 0) return { avg: 0, min: 0, max: 0, stdDev: 0, samples: [] };
+  
+  const avg = samples.reduce((a, b) => a + b, 0) / n;
+  const min = Math.min(...samples);
+  const max = Math.max(...samples);
+  const variance = samples.reduce((sum, x) => sum + Math.pow(x - avg, 2), 0) / n;
+  const stdDev = Math.sqrt(variance);
+  
+  return { avg, min, max, stdDev, samples };
+}
+
+export async function runKemBenchmark(iterations: number = 10): Promise<BenchmarkResults> {
+  const kyberKeyGenTimes: number[] = [];
+  const kyberEncapTimes: number[] = [];
+  const kyberDecapTimes: number[] = [];
+  
+  const frodoKeyGenTimes: number[] = [];
+  const frodoEncapTimes: number[] = [];
+  const frodoDecapTimes: number[] = [];
+  
+  let kyberSizes = { publicKey: 0, secretKey: 0, ciphertext: 0, sharedSecret: 0 };
+  let frodoSizes = { publicKey: 0, secretKey: 0, ciphertext: 0, sharedSecret: 0 };
+  
+  // Run Kyber benchmarks
+  for (let i = 0; i < iterations; i++) {
+    // KeyGen
+    const kgStart = performance.now();
+    const kp = await miniKyberKeyGen();
+    kyberKeyGenTimes.push(performance.now() - kgStart);
+    
+    if (i === 0) {
+      kyberSizes.publicKey = JSON.stringify(kp.pk).length;
+      kyberSizes.secretKey = JSON.stringify(kp.sk).length;
+    }
+    
+    // Encapsulate
+    const encStart = performance.now();
+    const { ct, sharedSecret } = await miniKyberEncapsulate(kp.pk);
+    kyberEncapTimes.push(performance.now() - encStart);
+    
+    if (i === 0) {
+      kyberSizes.ciphertext = JSON.stringify(ct).length;
+      kyberSizes.sharedSecret = sharedSecret.length;
+    }
+    
+    // Decapsulate
+    const decStart = performance.now();
+    await miniKyberDecapsulate(kp.sk, ct);
+    kyberDecapTimes.push(performance.now() - decStart);
+  }
+  
+  // Run Frodo benchmarks
+  for (let i = 0; i < iterations; i++) {
+    // KeyGen
+    const kgStart = performance.now();
+    const kp = await miniFrodoKeyGen();
+    frodoKeyGenTimes.push(performance.now() - kgStart);
+    
+    if (i === 0) {
+      frodoSizes.publicKey = JSON.stringify(kp.pk).length;
+      frodoSizes.secretKey = JSON.stringify(kp.sk).length;
+    }
+    
+    // Encapsulate
+    const encStart = performance.now();
+    const { ct, sharedSecret } = await miniFrodoEncapsulate(kp.pk);
+    frodoEncapTimes.push(performance.now() - encStart);
+    
+    if (i === 0) {
+      frodoSizes.ciphertext = JSON.stringify(ct).length;
+      frodoSizes.sharedSecret = sharedSecret.length;
+    }
+    
+    // Decapsulate
+    const decStart = performance.now();
+    await miniFrodoDecapsulate(kp.sk, ct);
+    frodoDecapTimes.push(performance.now() - decStart);
+  }
+  
+  return {
+    iterations,
+    timestamp: Date.now(),
+    kyber: {
+      keyGen: calculateStats(kyberKeyGenTimes),
+      encapsulate: calculateStats(kyberEncapTimes),
+      decapsulate: calculateStats(kyberDecapTimes),
+      sizes: kyberSizes,
+    },
+    frodo: {
+      keyGen: calculateStats(frodoKeyGenTimes),
+      encapsulate: calculateStats(frodoEncapTimes),
+      decapsulate: calculateStats(frodoDecapTimes),
+      sizes: frodoSizes,
+    },
+  };
+}
+
+// ============ CSV Export ============
+
+export function exportBenchmarksToCSV(
+  events: BenchmarkEvent[],
+  benchmarkResults: BenchmarkResults | null
+): string {
+  const lines: string[] = [];
+  
+  // Header info
+  lines.push("# PQC Benchmark Export");
+  lines.push(`# Generated: ${new Date().toISOString()}`);
+  lines.push(`# User Agent: ${typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A'}`);
+  lines.push("");
+  
+  // KEM Comparison Results (if available)
+  if (benchmarkResults) {
+    lines.push("# ============ KEM COMPARISON BENCHMARK ============");
+    lines.push(`# Iterations: ${benchmarkResults.iterations}`);
+    lines.push("");
+    
+    lines.push("Algorithm,Operation,Average (ms),Std Dev (ms),Min (ms),Max (ms)");
+    lines.push(`Kyber,KeyGen,${benchmarkResults.kyber.keyGen.avg.toFixed(4)},${benchmarkResults.kyber.keyGen.stdDev.toFixed(4)},${benchmarkResults.kyber.keyGen.min.toFixed(4)},${benchmarkResults.kyber.keyGen.max.toFixed(4)}`);
+    lines.push(`Kyber,Encapsulate,${benchmarkResults.kyber.encapsulate.avg.toFixed(4)},${benchmarkResults.kyber.encapsulate.stdDev.toFixed(4)},${benchmarkResults.kyber.encapsulate.min.toFixed(4)},${benchmarkResults.kyber.encapsulate.max.toFixed(4)}`);
+    lines.push(`Kyber,Decapsulate,${benchmarkResults.kyber.decapsulate.avg.toFixed(4)},${benchmarkResults.kyber.decapsulate.stdDev.toFixed(4)},${benchmarkResults.kyber.decapsulate.min.toFixed(4)},${benchmarkResults.kyber.decapsulate.max.toFixed(4)}`);
+    lines.push(`Frodo,KeyGen,${benchmarkResults.frodo.keyGen.avg.toFixed(4)},${benchmarkResults.frodo.keyGen.stdDev.toFixed(4)},${benchmarkResults.frodo.keyGen.min.toFixed(4)},${benchmarkResults.frodo.keyGen.max.toFixed(4)}`);
+    lines.push(`Frodo,Encapsulate,${benchmarkResults.frodo.encapsulate.avg.toFixed(4)},${benchmarkResults.frodo.encapsulate.stdDev.toFixed(4)},${benchmarkResults.frodo.encapsulate.min.toFixed(4)},${benchmarkResults.frodo.encapsulate.max.toFixed(4)}`);
+    lines.push(`Frodo,Decapsulate,${benchmarkResults.frodo.decapsulate.avg.toFixed(4)},${benchmarkResults.frodo.decapsulate.stdDev.toFixed(4)},${benchmarkResults.frodo.decapsulate.min.toFixed(4)},${benchmarkResults.frodo.decapsulate.max.toFixed(4)}`);
+    lines.push("");
+    
+    lines.push("Algorithm,Public Key (bytes),Secret Key (bytes),Ciphertext (bytes),Shared Secret (bytes)");
+    lines.push(`Kyber,${benchmarkResults.kyber.sizes.publicKey},${benchmarkResults.kyber.sizes.secretKey},${benchmarkResults.kyber.sizes.ciphertext},${benchmarkResults.kyber.sizes.sharedSecret}`);
+    lines.push(`Frodo,${benchmarkResults.frodo.sizes.publicKey},${benchmarkResults.frodo.sizes.secretKey},${benchmarkResults.frodo.sizes.ciphertext},${benchmarkResults.frodo.sizes.sharedSecret}`);
+    lines.push("");
+    
+    // Raw samples for statistical analysis
+    lines.push("# Raw timing samples (ms)");
+    lines.push("Algorithm,Operation,Sample Index,Time (ms)");
+    benchmarkResults.kyber.keyGen.samples.forEach((t, i) => lines.push(`Kyber,KeyGen,${i + 1},${t.toFixed(4)}`));
+    benchmarkResults.kyber.encapsulate.samples.forEach((t, i) => lines.push(`Kyber,Encapsulate,${i + 1},${t.toFixed(4)}`));
+    benchmarkResults.kyber.decapsulate.samples.forEach((t, i) => lines.push(`Kyber,Decapsulate,${i + 1},${t.toFixed(4)}`));
+    benchmarkResults.frodo.keyGen.samples.forEach((t, i) => lines.push(`Frodo,KeyGen,${i + 1},${t.toFixed(4)}`));
+    benchmarkResults.frodo.encapsulate.samples.forEach((t, i) => lines.push(`Frodo,Encapsulate,${i + 1},${t.toFixed(4)}`));
+    benchmarkResults.frodo.decapsulate.samples.forEach((t, i) => lines.push(`Frodo,Decapsulate,${i + 1},${t.toFixed(4)}`));
+    lines.push("");
+  }
+  
+  // Real-time events
+  if (events.length > 0) {
+    lines.push("# ============ REAL-TIME EVENTS ============");
+    lines.push("Timestamp,Type,Algorithm,Operation,Duration (ms),Input Size (bytes),Output Size (bytes)");
+    
+    events.forEach(event => {
+      lines.push([
+        new Date(event.timestamp).toISOString(),
+        event.type,
+        event.algorithm,
+        `"${event.operation}"`,
+        event.durationMs.toFixed(4),
+        event.inputSize ?? "",
+        event.outputSize ?? "",
+      ].join(","));
+    });
+    lines.push("");
+    
+    // Summary statistics from events
+    const summary = getBenchmarkSummary();
+    lines.push("# ============ EVENT SUMMARY ============");
+    lines.push("Metric,Value");
+    lines.push(`Total Events,${events.length}`);
+    lines.push(`Key Generations,${summary.keygenEvents.length}`);
+    lines.push(`Encapsulations,${summary.encapsulateEvents.length}`);
+    lines.push(`Decapsulations,${summary.decapsulateEvents.length}`);
+    lines.push(`AES Encryptions,${summary.aesEncryptEvents.length}`);
+    lines.push(`AES Decryptions,${summary.aesDecryptEvents.length}`);
+    lines.push(`Handshakes,${summary.handshakeEvents.length}`);
+    
+    if (summary.averages.kyberKeygen) lines.push(`Kyber KeyGen Avg (ms),${summary.averages.kyberKeygen.toFixed(4)}`);
+    if (summary.averages.kyberEncapsulate) lines.push(`Kyber Encap Avg (ms),${summary.averages.kyberEncapsulate.toFixed(4)}`);
+    if (summary.averages.kyberDecapsulate) lines.push(`Kyber Decap Avg (ms),${summary.averages.kyberDecapsulate.toFixed(4)}`);
+    if (summary.averages.frodoKeygen) lines.push(`Frodo KeyGen Avg (ms),${summary.averages.frodoKeygen.toFixed(4)}`);
+    if (summary.averages.frodoEncapsulate) lines.push(`Frodo Encap Avg (ms),${summary.averages.frodoEncapsulate.toFixed(4)}`);
+    if (summary.averages.frodoDecapsulate) lines.push(`Frodo Decap Avg (ms),${summary.averages.frodoDecapsulate.toFixed(4)}`);
+    if (summary.averages.aesEncrypt) lines.push(`AES Encrypt Avg (ms),${summary.averages.aesEncrypt.toFixed(4)}`);
+    if (summary.averages.aesDecrypt) lines.push(`AES Decrypt Avg (ms),${summary.averages.aesDecrypt.toFixed(4)}`);
+  }
+  
+  return lines.join("\n");
+}
+
 // Get summary statistics
 export function getBenchmarkSummary(): {
   keygenEvents: BenchmarkEvent[];

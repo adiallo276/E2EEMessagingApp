@@ -99,6 +99,7 @@ export default function MessagesPage() {
   const [showDisableWarning, setShowDisableWarning] = useState<boolean>(false);
   const [showBenchmark, setShowBenchmark] = useState<boolean>(false);
   const [sendingImage, setSendingImage] = useState<boolean>(false);
+  const [handshakeStarted, setHandshakeStarted] = useState<boolean>(false);
 
   const clientRef = useRef<Client | null>(null);
   const subRef = useRef<StompSubscription | null>(null);
@@ -323,6 +324,12 @@ export default function MessagesPage() {
     const myUsername = usernameRef.current;
     if (!myUsername) throw new Error("No username in localStorage");
 
+    setHandshakeStarted(true);
+    
+    // Lock the algorithm when starting handshake
+    localStorage.setItem(`e2ee_alg_locked:${conversationId}`, selectedAlg);
+    setAlgLocked(true);
+
     const kp = await benchmarkedGetOrCreateKeyPair(myUsername, selectedAlg);
     const helloContent = makeHello(selectedAlg, kp.pk);
 
@@ -519,17 +526,23 @@ export default function MessagesPage() {
   }
 
   function handleReset() {
+    // Clear session and algorithm lock
     clearSession(conversationId);
+    localStorage.removeItem(`e2ee_alg_locked:${conversationId}`);
+    
     setE2eeReady(false);
     setPendingInvite(null);
+    setAlgLocked(false);
+    setHandshakeStarted(false);
+    setAlg("kyber"); // Reset to default
     
-    if (e2eeEnabled) {
-      startE2eeHandshake(alg).catch((e) => {
-        setError(e?.message || "Failed to restart encryption");
-      });
-    } else {
-      hideEncryptedMessages();
-    }
+    // Don't auto-start - let user choose algorithm and click Start
+    hideEncryptedMessages();
+  }
+
+  function handleAlgChange(newAlg: KemAlg) {
+    if (algLocked) return; // Can't change if locked
+    setAlg(newAlg);
   }
 
   useEffect(() => {
@@ -540,6 +553,7 @@ export default function MessagesPage() {
     setPendingInvite(null);
     setOtherUsername("");
     setShowDisableWarning(false);
+    setHandshakeStarted(false);
     rawMessagesRef.current = [];
     usernameRef.current = getUsername();
     
@@ -573,13 +587,8 @@ export default function MessagesPage() {
     };
   }, [conversationId]);
 
-  useEffect(() => {
-    if (e2eeEnabled && !e2eeReady && !hasSession(conversationId) && !pendingInvite && clientRef.current?.connected) {
-      startE2eeHandshake(alg).catch((e) => {
-        console.error("Auto-handshake failed:", e);
-      });
-    }
-  }, [e2eeEnabled, e2eeReady, conversationId, alg, pendingInvite]);
+  // REMOVED auto-handshake - user must manually start encryption
+  // This allows selecting the algorithm before starting
 
   const displayAlg = pendingInvite?.alg || alg;
   const algDisplayName = displayAlg === "kyber" ? "Kyber" : "Frodo";
@@ -606,9 +615,11 @@ export default function MessagesPage() {
                   <div className={`text-xs px-2 py-0.5 rounded-full ${
                     e2eeReady 
                       ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
-                      : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                      : handshakeStarted
+                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                        : "bg-blue-500/10 text-blue-600 dark:text-blue-400"
                   }`}>
-                    {e2eeReady ? "Encrypted" : "Connecting..."}
+                    {e2eeReady ? "Encrypted" : handshakeStarted ? "Connecting..." : "Ready to encrypt"}
                   </div>
                 )}
                 
@@ -633,6 +644,41 @@ export default function MessagesPage() {
                   Benchmark
                 </Button>
 
+                {/* Algorithm selector - show when E2EE enabled but handshake not started */}
+                {e2eeEnabled && !e2eeReady && !handshakeStarted && !pendingInvite && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 border border-border rounded-lg p-0.5">
+                      <button
+                        onClick={() => handleAlgChange("kyber")}
+                        className={`px-2 py-1 text-xs rounded transition ${
+                          alg === "kyber"
+                            ? "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-medium"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Kyber
+                      </button>
+                      <button
+                        onClick={() => handleAlgChange("frodo")}
+                        className={`px-2 py-1 text-xs rounded transition ${
+                          alg === "frodo"
+                            ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Frodo
+                      </button>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => startE2eeHandshake(alg).catch((e) => setError(e?.message))}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                    >
+                      Start Encryption
+                    </Button>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">E2EE</span>
                   <Switch
@@ -641,11 +687,12 @@ export default function MessagesPage() {
                   />
                 </div>
 
-                {e2eeEnabled && (
+                {e2eeEnabled && e2eeReady && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleReset}
+                    title="Reset encryption - allows changing algorithm"
                   >
                     Reset
                   </Button>
@@ -726,13 +773,13 @@ export default function MessagesPage() {
               </div>
             )}
 
-            {e2eeEnabled && !e2eeReady && !pendingInvite && !showDisableWarning && (
+            {e2eeEnabled && !e2eeReady && handshakeStarted && !pendingInvite && !showDisableWarning && (
               <div className="px-4 py-2 text-sm text-muted-foreground border-b bg-muted/30 flex items-center gap-2">
                 <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                Waiting for {otherUsername || "the other user"} to accept encryption
+                Waiting for {otherUsername || "the other user"} to accept encryption ({algDisplayName})
               </div>
             )}
 

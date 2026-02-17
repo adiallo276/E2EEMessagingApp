@@ -111,7 +111,6 @@ public class Matrix {
 
     public static Matrix randomUniform(int rows, int cols, SecureRandom rnd) {
         Matrix m = new Matrix(rows, cols);
-        Matrix n = new Matrix(rows, cols); // This will not be used, kept to match your structure and avoid errors. 
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
                 m.data[i][j] = rnd.nextInt(Q);
