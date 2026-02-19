@@ -8,7 +8,10 @@ import {
   clearBenchmarks,
   getBenchmarkSummary,
   runKemBenchmark,
+  runThroughputBenchmark,
   BenchmarkResults,
+  ThroughputResults,
+  BenchmarkProgress,
   exportBenchmarksToCSV,
 } from "@/lib/crypto/benchmark";
 
@@ -17,14 +20,18 @@ type Props = {
   onClose: () => void;
 };
 
-type Tab = "events" | "summary" | "compare";
+type Tab = "events" | "summary" | "compare" | "throughput";
 
 export default function BenchmarkPanel({ isOpen, onClose }: Props) {
   const [events, setEvents] = useState<BenchmarkEvent[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>("events");
   const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkResults | null>(null);
+  const [throughputResults, setThroughputResults] = useState<ThroughputResults | null>(null);
   const [isRunningBenchmark, setIsRunningBenchmark] = useState(false);
-  const [iterations, setIterations] = useState(10);
+  const [iterations, setIterations] = useState(100);
+  const [messagesPerSession, setMessagesPerSession] = useState(10);
+  const [messageSizeKB, setMessageSizeKB] = useState(1);
+  const [progress, setProgress] = useState<BenchmarkProgress | null>(null);
 
   useEffect(() => {
     const unsubscribe = subscribeToBenchmarks((newEvents) => {
@@ -35,18 +42,39 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
 
   const runBenchmark = useCallback(async () => {
     setIsRunningBenchmark(true);
+    setProgress(null);
     try {
-      const results = await runKemBenchmark(iterations);
+      const results = await runKemBenchmark(iterations, (p) => setProgress(p));
       setBenchmarkResults(results);
     } catch (error) {
       console.error("Benchmark failed:", error);
     } finally {
       setIsRunningBenchmark(false);
+      setProgress(null);
     }
   }, [iterations]);
 
+  const runThroughput = useCallback(async () => {
+    setIsRunningBenchmark(true);
+    setProgress(null);
+    try {
+      const results = await runThroughputBenchmark(
+        iterations,
+        messagesPerSession,
+        messageSizeKB,
+        (p) => setProgress(p)
+      );
+      setThroughputResults(results);
+    } catch (error) {
+      console.error("Throughput benchmark failed:", error);
+    } finally {
+      setIsRunningBenchmark(false);
+      setProgress(null);
+    }
+  }, [iterations, messagesPerSession, messageSizeKB]);
+
   const handleExport = useCallback(() => {
-    const csv = exportBenchmarksToCSV(events, benchmarkResults);
+    const csv = exportBenchmarksToCSV(events, benchmarkResults, throughputResults);
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -56,7 +84,7 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [events, benchmarkResults]);
+  }, [events, benchmarkResults, throughputResults]);
 
   if (!isOpen) return null;
 
@@ -185,7 +213,17 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Compare
+          KEM
+        </button>
+        <button
+          onClick={() => setActiveTab("throughput")}
+          className={`flex-1 px-3 py-2 text-xs font-medium transition ${
+            activeTab === "throughput"
+              ? "text-foreground border-b-2 border-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Throughput
         </button>
       </div>
 
@@ -401,13 +439,34 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                 <label className="text-xs text-muted-foreground">Iterations:</label>
                 <input
                   type="number"
-                  min="1"
-                  max="100"
+                  min="10"
+                  max="5000"
+                  step="100"
                   value={iterations}
-                  onChange={(e) => setIterations(Math.max(1, Math.min(100, parseInt(e.target.value) || 10)))}
-                  className="w-16 px-2 py-1 text-xs border border-border rounded bg-background"
+                  onChange={(e) => setIterations(Math.max(10, Math.min(5000, parseInt(e.target.value) || 100)))}
+                  className="w-20 px-2 py-1 text-xs border border-border rounded bg-background"
+                  disabled={isRunningBenchmark}
                 />
               </div>
+              
+              {/* Quick select buttons */}
+              <div className="flex gap-1 mb-3">
+                {[100, 500, 1000, 5000].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setIterations(n)}
+                    disabled={isRunningBenchmark}
+                    className={`flex-1 px-2 py-1 text-[10px] rounded border transition ${
+                      iterations === n
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border hover:bg-muted"
+                    }`}
+                  >
+                    {n >= 1000 ? `${n/1000}k` : n}
+                  </button>
+                ))}
+              </div>
+              
               <Button
                 onClick={runBenchmark}
                 disabled={isRunningBenchmark}
@@ -426,9 +485,34 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                   "Run Benchmark"
                 )}
               </Button>
+              
+              {/* Progress bar */}
+              {isRunningBenchmark && progress && (
+                <div className="mt-3">
+                  <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                    <span>{progress.phase}</span>
+                    <span>{progress.current}/{progress.total}</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary transition-all duration-150"
+                      style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              
               <p className="text-[10px] text-muted-foreground mt-2">
                 Runs {iterations} iterations of KeyGen, Encapsulation, and Decapsulation for both Kyber and Frodo.
+                Includes warmup phase for JIT optimization.
               </p>
+              
+              <div className="mt-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                  <strong>Note:</strong> These are simplified educational implementations. 
+                  Real Kyber/Frodo libraries would show different performance characteristics.
+                </p>
+              </div>
             </div>
 
             {/* Results */}
@@ -610,6 +694,236 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
             {!benchmarkResults && (
               <div className="text-center py-8 text-sm text-muted-foreground">
                 Click "Run Benchmark" to compare Kyber vs Frodo performance.
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "throughput" && (
+          <div className="p-3 space-y-4">
+            {/* Throughput Benchmark Controls */}
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-xs font-medium mb-3">Session Throughput Benchmark</div>
+              <p className="text-[10px] text-muted-foreground mb-3">
+                Simulates real messaging: Key Exchange + N encrypted messages.
+                Compares Kyber, Frodo, and AES-only (pre-shared key).
+              </p>
+              
+              <div className="space-y-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground w-24">Sessions:</label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="500"
+                    value={iterations}
+                    onChange={(e) => setIterations(Math.max(10, Math.min(500, parseInt(e.target.value) || 50)))}
+                    className="w-20 px-2 py-1 text-xs border border-border rounded bg-background"
+                    disabled={isRunningBenchmark}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground w-24">Msgs/session:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={messagesPerSession}
+                    onChange={(e) => setMessagesPerSession(Math.max(1, Math.min(100, parseInt(e.target.value) || 10)))}
+                    className="w-20 px-2 py-1 text-xs border border-border rounded bg-background"
+                    disabled={isRunningBenchmark}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground w-24">Msg size (KB):</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={messageSizeKB}
+                    onChange={(e) => setMessageSizeKB(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                    className="w-20 px-2 py-1 text-xs border border-border rounded bg-background"
+                    disabled={isRunningBenchmark}
+                  />
+                </div>
+              </div>
+              
+              {/* Quick presets */}
+              <div className="flex gap-1 mb-3">
+                <button
+                  onClick={() => { setIterations(50); setMessagesPerSession(10); setMessageSizeKB(1); }}
+                  disabled={isRunningBenchmark}
+                  className="flex-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-muted"
+                >
+                  Quick
+                </button>
+                <button
+                  onClick={() => { setIterations(100); setMessagesPerSession(20); setMessageSizeKB(5); }}
+                  disabled={isRunningBenchmark}
+                  className="flex-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-muted"
+                >
+                  Normal
+                </button>
+                <button
+                  onClick={() => { setIterations(200); setMessagesPerSession(50); setMessageSizeKB(10); }}
+                  disabled={isRunningBenchmark}
+                  className="flex-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-muted"
+                >
+                  Heavy
+                </button>
+              </div>
+              
+              <Button
+                onClick={runThroughput}
+                disabled={isRunningBenchmark}
+                className="w-full text-xs"
+                size="sm"
+              >
+                {isRunningBenchmark ? (
+                  <>
+                    <svg className="h-3 w-3 mr-2 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Running...
+                  </>
+                ) : (
+                  "Run Throughput Benchmark"
+                )}
+              </Button>
+              
+              {/* Progress bar */}
+              {isRunningBenchmark && progress && (
+                <div className="mt-3">
+                  <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                    <span>{progress.phase}</span>
+                    <span>{progress.current}/{progress.total}</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary transition-all duration-150"
+                      style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Throughput Results */}
+            {throughputResults && (
+              <>
+                {/* Summary Cards */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-2 text-center">
+                    <div className="text-[10px] text-muted-foreground">Kyber Total</div>
+                    <div className="text-sm font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                      {formatDuration(throughputResults.kyber.totalSession.avg)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 p-2 text-center">
+                    <div className="text-[10px] text-muted-foreground">Frodo Total</div>
+                    <div className="text-sm font-mono font-bold text-orange-600 dark:text-orange-400">
+                      {formatDuration(throughputResults.frodo.totalSession.avg)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2 text-center">
+                    <div className="text-[10px] text-muted-foreground">ECDH Total</div>
+                    <div className="text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {formatDuration(throughputResults.ecdh.totalSession.avg)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Overhead Summary */}
+                <div className="rounded-lg border border-border p-3">
+                  <div className="text-xs font-medium mb-2">PQC Overhead vs Traditional ECDH</div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-muted-foreground">Kyber vs ECDH:</span>
+                      <span className={`text-xs font-mono font-bold ${throughputResults.summary.kyberVsEcdhPercent > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                        {throughputResults.summary.kyberVsEcdhPercent > 0 ? '+' : ''}{throughputResults.summary.kyberVsEcdhPercent.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-muted-foreground">Frodo vs ECDH:</span>
+                      <span className={`text-xs font-mono font-bold ${throughputResults.summary.frodoVsEcdhPercent > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                        {throughputResults.summary.frodoVsEcdhPercent > 0 ? '+' : ''}{throughputResults.summary.frodoVsEcdhPercent.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center border-t border-border pt-2">
+                      <span className="text-[10px] text-muted-foreground">Frodo vs Kyber:</span>
+                      <span className={`text-xs font-mono font-bold ${throughputResults.summary.kyberVsFrodoPercent > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {throughputResults.summary.kyberVsFrodoPercent > 0 ? '+' : ''}{throughputResults.summary.kyberVsFrodoPercent.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detailed Breakdown */}
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <div className="bg-muted/50 px-3 py-2 border-b border-border">
+                    <div className="text-xs font-medium">Detailed Breakdown</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {throughputResults.iterations} sessions × {throughputResults.messagesPerSession} msgs × {formatSize(throughputResults.messageSize)}
+                    </div>
+                  </div>
+                  <div className="divide-y divide-border">
+                    <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-muted/30 text-[10px] font-medium">
+                      <div>Metric</div>
+                      <div className="text-right text-indigo-600 dark:text-indigo-400">Kyber</div>
+                      <div className="text-right text-orange-600 dark:text-orange-400">Frodo</div>
+                      <div className="text-right text-emerald-600 dark:text-emerald-400">ECDH</div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 px-3 py-2 text-[10px]">
+                      <div className="font-medium">Key Exchange</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.kyber.keyExchange.avg)}</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.frodo.keyExchange.avg)}</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.ecdh.keyExchange.avg)}</div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 px-3 py-2 text-[10px]">
+                      <div className="font-medium">Encrypt (per msg)</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.kyber.messageEncrypt.avg)}</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.frodo.messageEncrypt.avg)}</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.ecdh.messageEncrypt.avg)}</div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 px-3 py-2 text-[10px]">
+                      <div className="font-medium">Decrypt (per msg)</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.kyber.messageDecrypt.avg)}</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.frodo.messageDecrypt.avg)}</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.ecdh.messageDecrypt.avg)}</div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 px-3 py-2 text-[10px] bg-muted/30 font-bold">
+                      <div>Total Session</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.kyber.totalSession.avg)}</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.frodo.totalSession.avg)}</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.ecdh.totalSession.avg)}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Interpretation */}
+                <div className="rounded-lg border border-border p-3 bg-muted/30">
+                  <div className="text-xs font-medium mb-2">📊 Interpretation</div>
+                  <p className="text-[10px] text-muted-foreground">
+                    The PQC overhead is primarily in the <strong>key exchange phase</strong>. 
+                    Once keys are established, message encryption (AES-GCM) is identical across all scenarios.
+                    <br/><br/>
+                    Compared to traditional ECDH (P-256):
+                    <br/>• Kyber adds <strong>{throughputResults.summary.kyberVsEcdhPercent > 0 ? '+' : ''}{throughputResults.summary.kyberVsEcdhPercent.toFixed(1)}%</strong> overhead
+                    <br/>• Frodo adds <strong>{throughputResults.summary.frodoVsEcdhPercent > 0 ? '+' : ''}{throughputResults.summary.frodoVsEcdhPercent.toFixed(1)}%</strong> overhead
+                    <br/><br/>
+                    <strong>Conclusion:</strong> {throughputResults.summary.kyberVsFrodoPercent > 0 
+                      ? `Kyber is ${Math.abs(throughputResults.summary.kyberVsFrodoPercent).toFixed(1)}% faster than Frodo.`
+                      : `Frodo is ${Math.abs(throughputResults.summary.kyberVsFrodoPercent).toFixed(1)}% faster than Kyber.`}
+                    {' '}Both PQC algorithms provide quantum resistance at the cost of {Math.min(Math.abs(throughputResults.summary.kyberVsEcdhPercent), Math.abs(throughputResults.summary.frodoVsEcdhPercent)).toFixed(0)}-{Math.max(Math.abs(throughputResults.summary.kyberVsEcdhPercent), Math.abs(throughputResults.summary.frodoVsEcdhPercent)).toFixed(0)}% performance overhead vs traditional ECDH.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {!throughputResults && (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                Click "Run Throughput Benchmark" to compare real-world session performance.
               </div>
             )}
           </div>

@@ -78,6 +78,12 @@ type SidebarItem = {
   unread?: number;
 };
 
+const ALG_INFO: Record<KemAlg, { name: string; color: string; bg: string }> = {
+  kyber: { name: "Kyber", color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/20" },
+  frodo: { name: "Frodo", color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-500/20" },
+  ntru: { name: "NTRU", color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-500/20" },
+};
+
 export default function MessagesPage() {
   const params = useParams();
   const router = useRouter();
@@ -100,6 +106,7 @@ export default function MessagesPage() {
   const [showBenchmark, setShowBenchmark] = useState<boolean>(false);
   const [sendingImage, setSendingImage] = useState<boolean>(false);
   const [handshakeStarted, setHandshakeStarted] = useState<boolean>(false);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
 
   const clientRef = useRef<Client | null>(null);
   const subRef = useRef<StompSubscription | null>(null);
@@ -114,7 +121,7 @@ export default function MessagesPage() {
 
   function getLockedAlg(): KemAlg | null {
     const stored = localStorage.getItem(`e2ee_alg_locked:${conversationId}`);
-    if (stored === "kyber" || stored === "frodo") return stored;
+    if (stored === "kyber" || stored === "frodo" || stored === "ntru") return stored;
     return null;
   }
 
@@ -158,7 +165,6 @@ export default function MessagesPage() {
     const env = tryParseEnvelope(m.content);
 
     if (!env) {
-      // Check if it's an image message (unencrypted)
       const imgData = parseImageMessage(m.content);
       if (imgData) {
         return { ...m, displayContent: "[Image]", imageData: imgData };
@@ -167,30 +173,29 @@ export default function MessagesPage() {
     }
 
     if (env.type === "E2EE_HELLO") {
-      const algName = env.alg === "frodo" ? "Frodo" : "Kyber";
-      return { ...m, displayContent: `Encryption requested using ${algName}` };
+      const algName = ALG_INFO[env.alg]?.name || env.alg;
+      return { ...m, displayContent: `🔐 Encryption requested using ${algName}` };
     }
 
     if (env.type === "E2EE_KEY") {
-      const algName = env.alg === "frodo" ? "Frodo" : "Kyber";
-      return { ...m, displayContent: `Encryption established using ${algName}` };
+      const algName = ALG_INFO[env.alg]?.name || env.alg;
+      return { ...m, displayContent: `✓ Encryption established using ${algName}` };
     }
 
     if (env.type === "E2EE_MSG") {
       if (canDecrypt && hasSession(conversationId)) {
         try {
           const { plaintext } = await benchmarkedDecryptChatMessage(conversationId, env);
-          // Check if decrypted content is an image
           const imgData = parseImageMessage(plaintext);
           if (imgData) {
             return { ...m, displayContent: "[Image]", imageData: imgData };
           }
           return { ...m, displayContent: plaintext };
         } catch {
-          return { ...m, displayContent: "Encrypted message" };
+          return { ...m, displayContent: "🔒 Encrypted message" };
         }
       } else {
-        return { ...m, displayContent: "Encrypted message" };
+        return { ...m, displayContent: "🔒 Encrypted message" };
       }
     }
 
@@ -269,9 +274,7 @@ export default function MessagesPage() {
 
       subRef.current?.unsubscribe();
       subRef.current = client.subscribe(`/topic/conversations/${conversationId}`, async (msg: IMessage) => {
-        console.log("[WS] Received message:", msg.body.substring(0, 200) + "...");
         const incoming: Message = JSON.parse(msg.body);
-        console.log("[WS] Parsed message id:", incoming.id, "content length:", incoming.content?.length);
         const myUsername = usernameRef.current;
 
         const env = tryParseEnvelope(incoming.content);
@@ -326,7 +329,6 @@ export default function MessagesPage() {
 
     setHandshakeStarted(true);
     
-    // Lock the algorithm when starting handshake
     localStorage.setItem(`e2ee_alg_locked:${conversationId}`, selectedAlg);
     setAlgLocked(true);
 
@@ -392,7 +394,6 @@ export default function MessagesPage() {
 
   async function sendMessage(messageContent: string) {
     const client = clientRef.current;
-    console.log("[Send] Starting, client connected:", client?.connected, "content length:", messageContent.length);
     
     if (!client || !client.connected) {
       setError("Not connected to server");
@@ -409,13 +410,10 @@ export default function MessagesPage() {
           setError("Waiting for encryption to be accepted");
           return;
         }
-        console.log("[Send] Encrypting message...");
         const { ciphertext } = await benchmarkedEncryptChatMessage(conversationId, messageContent);
         outgoingContent = ciphertext;
-        console.log("[Send] Encrypted, ciphertext length:", ciphertext.length);
       }
 
-      console.log("[Send] Publishing to WebSocket, final length:", outgoingContent.length);
       client.publish({
         destination: "/app/chat.send",
         body: JSON.stringify({
@@ -423,9 +421,7 @@ export default function MessagesPage() {
           content: outgoingContent,
         }),
       });
-      console.log("[Send] Published successfully");
     } catch (e: any) {
-      console.error("[Send] Error:", e);
       setError(e?.message || "Failed to send");
       throw e;
     }
@@ -441,15 +437,11 @@ export default function MessagesPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    console.log("[Image] Selected file:", file.name, file.type, file.size, "bytes");
-
-    // Validate file type
     if (!file.type.startsWith("image/")) {
       setError("Please select an image file");
       return;
     }
 
-    // Limit file size (2MB)
     const maxSize = 2 * 1024 * 1024;
     if (file.size > maxSize) {
       setError("Image must be smaller than 2MB");
@@ -460,36 +452,23 @@ export default function MessagesPage() {
     setError(null);
 
     try {
-      // Read file as base64
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
           const result = reader.result as string;
-          // Remove the data URL prefix (e.g., "data:image/png;base64,")
           const base64 = result.split(",")[1];
-          console.log("[Image] Base64 length:", base64.length);
           resolve(base64);
         };
-        reader.onerror = (err) => {
-          console.error("[Image] FileReader error:", err);
-          reject(err);
-        };
+        reader.onerror = (err) => reject(err);
         reader.readAsDataURL(file);
       });
 
-      // Create image message
       const imageMessage = createImageMessage(file.type, base64Data);
-      console.log("[Image] Message length:", imageMessage.length);
-      
-      // Send it
       await sendMessage(imageMessage);
-      console.log("[Image] Message sent successfully");
     } catch (err: any) {
-      console.error("[Image] Error sending:", err);
       setError(err?.message || "Failed to send image");
     } finally {
       setSendingImage(false);
-      // Reset input
       if (imageInputRef.current) {
         imageInputRef.current.value = "";
       }
@@ -504,13 +483,6 @@ export default function MessagesPage() {
       if (hasSession(conversationId)) {
         setE2eeReady(true);
         showDecryptedMessages();
-      } else {
-        try {
-          await startE2eeHandshake(alg);
-        } catch (e: any) {
-          setError(e?.message || "Failed to start encryption");
-          setE2eeEnabled(false);
-        }
       }
     } else {
       setShowDisableWarning(true);
@@ -526,7 +498,6 @@ export default function MessagesPage() {
   }
 
   function handleReset() {
-    // Clear session and algorithm lock
     clearSession(conversationId);
     localStorage.removeItem(`e2ee_alg_locked:${conversationId}`);
     
@@ -534,14 +505,13 @@ export default function MessagesPage() {
     setPendingInvite(null);
     setAlgLocked(false);
     setHandshakeStarted(false);
-    setAlg("kyber"); // Reset to default
+    setAlg("kyber");
     
-    // Don't auto-start - let user choose algorithm and click Start
     hideEncryptedMessages();
   }
 
   function handleAlgChange(newAlg: KemAlg) {
-    if (algLocked) return; // Can't change if locked
+    if (algLocked) return;
     setAlg(newAlg);
   }
 
@@ -554,6 +524,7 @@ export default function MessagesPage() {
     setOtherUsername("");
     setShowDisableWarning(false);
     setHandshakeStarted(false);
+    setShowSettings(false);
     rawMessagesRef.current = [];
     usernameRef.current = getUsername();
     
@@ -587,13 +558,10 @@ export default function MessagesPage() {
     };
   }, [conversationId]);
 
-  // REMOVED auto-handshake - user must manually start encryption
-  // This allows selecting the algorithm before starting
-
   const displayAlg = pendingInvite?.alg || alg;
-  const algDisplayName = displayAlg === "kyber" ? "Kyber" : "Frodo";
-  const showAlgBadge = algLocked || pendingInvite !== null;
+  const algInfo = ALG_INFO[displayAlg];
   const inputDisabled = (e2eeEnabled && !e2eeReady) || sendingImage;
+  const showEncryptionSetup = e2eeEnabled && !e2eeReady && !handshakeStarted && !pendingInvite;
 
   return (
     <div className="flex h-screen">
@@ -602,84 +570,52 @@ export default function MessagesPage() {
           sidebar={<ConversationsSidebar items={conversations} />}
           header={
             <div className="flex w-full items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="font-semibold">{otherUsername || `Conversation ${conversationId}`}</div>
+              {/* Left: User info and status */}
+              <div className="flex items-center gap-3">
+                <div className="font-semibold">{otherUsername || `Conversation`}</div>
                 
-                {showAlgBadge && (
-                  <div className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                    {algDisplayName}
-                  </div>
-                )}
-                
-                {e2eeEnabled && (
-                  <div className={`text-xs px-2 py-0.5 rounded-full ${
+                {/* Status badge */}
+                {e2eeEnabled ? (
+                  <div className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${
                     e2eeReady 
                       ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
-                      : handshakeStarted
-                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                        : "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                      : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
                   }`}>
-                    {e2eeReady ? "Encrypted" : handshakeStarted ? "Connecting..." : "Ready to encrypt"}
+                    {e2eeReady ? (
+                      <>
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        <span>{algInfo.name}</span>
+                      </>
+                    ) : (
+                      <span>{handshakeStarted ? "Connecting..." : "Setup needed"}</span>
+                    )}
                   </div>
-                )}
-                
-                {!e2eeEnabled && (
-                  <div className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
-                    Not encrypted
+                ) : (
+                  <div className="text-xs px-2 py-0.5 rounded-full bg-zinc-500/10 text-zinc-500">
+                    Unencrypted
                   </div>
                 )}
               </div>
 
-              <div className="flex items-center gap-3">
+              {/* Right: Controls */}
+              <div className="flex items-center gap-2">
                 <Button
-                  variant={showBenchmark ? "default" : "outline"}
+                  variant="ghost"
                   size="sm"
                   onClick={() => setShowBenchmark(!showBenchmark)}
-                  className="text-xs"
+                  className={`h-8 px-2 ${showBenchmark ? 'bg-muted' : ''}`}
+                  title="Toggle benchmark panel"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
-                    <path d="M3 3v18h18"/>
-                    <path d="m19 9-5 5-4-4-3 3"/>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
-                  Benchmark
                 </Button>
 
-                {/* Algorithm selector - show when E2EE enabled but handshake not started */}
-                {e2eeEnabled && !e2eeReady && !handshakeStarted && !pendingInvite && (
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 border border-border rounded-lg p-0.5">
-                      <button
-                        onClick={() => handleAlgChange("kyber")}
-                        className={`px-2 py-1 text-xs rounded transition ${
-                          alg === "kyber"
-                            ? "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-medium"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        Kyber
-                      </button>
-                      <button
-                        onClick={() => handleAlgChange("frodo")}
-                        className={`px-2 py-1 text-xs rounded transition ${
-                          alg === "frodo"
-                            ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 font-medium"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        Frodo
-                      </button>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() => startE2eeHandshake(alg).catch((e) => setError(e?.message))}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-                    >
-                      Start Encryption
-                    </Button>
-                  </div>
-                )}
+                <div className="h-4 w-px bg-border" />
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">E2EE</span>
                   <Switch
                     checked={e2eeEnabled}
@@ -689,10 +625,11 @@ export default function MessagesPage() {
 
                 {e2eeEnabled && e2eeReady && (
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     onClick={handleReset}
-                    title="Reset encryption - allows changing algorithm"
+                    className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    title="Reset encryption"
                   >
                     Reset
                   </Button>
@@ -702,87 +639,117 @@ export default function MessagesPage() {
           }
         >
           <div className="flex h-full flex-col">
+            {/* Encryption Setup Bar */}
+            {showEncryptionSetup && (
+              <div className="border-b border-border bg-gradient-to-r from-primary/5 to-transparent px-4 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium">Start encrypted conversation</div>
+                      <div className="text-xs text-muted-foreground">Select algorithm and begin</div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    {/* Algorithm Pills */}
+                    <div className="flex rounded-lg border border-border p-0.5 bg-muted/30">
+                      {(["kyber", "frodo", "ntru"] as KemAlg[]).map((a) => (
+                        <button
+                          key={a}
+                          onClick={() => handleAlgChange(a)}
+                          className={`px-3 py-1 text-xs rounded-md transition-all ${
+                            alg === a
+                              ? `${ALG_INFO[a].bg} ${ALG_INFO[a].color} font-medium`
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {ALG_INFO[a].name}
+                        </button>
+                      ))}
+                    </div>
+                    
+                    <Button
+                      size="sm"
+                      onClick={() => startE2eeHandshake(alg).catch((e) => setError(e?.message))}
+                      className="bg-primary hover:bg-primary/90"
+                    >
+                      Start
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Disable Warning */}
             {showDisableWarning && (
-              <div className="border-b border-border bg-red-500/5">
-                <div className="px-4 py-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500/20 text-red-600 dark:text-red-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 9v4"/>
-                          <path d="M12 17h.01"/>
-                          <path d="M3.586 20.414A2 2 0 0 0 5 21h14a2 2 0 0 0 1.414-.586l.001-.001A2 2 0 0 0 21 19V5a2 2 0 0 0-.586-1.414A2 2 0 0 0 19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 .586 1.414z"/>
-                        </svg>
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium">Turn off encryption?</div>
-                        <div className="text-xs text-muted-foreground">
-                          New messages will be sent without encryption and can be read by the server.
-                        </div>
-                      </div>
+              <div className="border-b border-red-500/20 bg-red-500/5 px-4 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/20 text-red-600 dark:text-red-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setShowDisableWarning(false)} className="text-xs">
-                        Cancel
-                      </Button>
-                      <Button size="sm" onClick={confirmDisableE2ee} className="bg-red-600 hover:bg-red-700 text-white text-xs">
-                        Turn off
-                      </Button>
+                    <div>
+                      <div className="text-sm font-medium">Turn off encryption?</div>
+                      <div className="text-xs text-muted-foreground">Messages will not be encrypted</div>
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setShowDisableWarning(false)}>Cancel</Button>
+                    <Button size="sm" onClick={confirmDisableE2ee} className="bg-red-600 hover:bg-red-700 text-white">Turn off</Button>
                   </div>
                 </div>
               </div>
             )}
 
+            {/* Pending Invite */}
             {pendingInvite && (
-              <div className="border-b border-border bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent">
-                <div className="px-4 py-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
-                          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                        </svg>
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium">
-                          {pendingInvite.fromUsername} wants to turn on encryption
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Using {pendingInvite.alg === "frodo" ? "Frodo" : "Kyber"} · All messages will be end-to-end encrypted
-                        </div>
-                      </div>
+              <div className="border-b border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={declineInvite} className="text-xs">
-                        Later
-                      </Button>
-                      <Button size="sm" onClick={acceptInvite} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
-                        Accept
-                      </Button>
+                    <div>
+                      <div className="text-sm font-medium">{pendingInvite.fromUsername} wants to encrypt</div>
+                      <div className="text-xs text-muted-foreground">Using {ALG_INFO[pendingInvite.alg].name}</div>
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={declineInvite}>Later</Button>
+                    <Button size="sm" onClick={acceptInvite} className="bg-emerald-600 hover:bg-emerald-700 text-white">Accept</Button>
                   </div>
                 </div>
               </div>
             )}
 
+            {/* Waiting for acceptance */}
+            {e2eeEnabled && !e2eeReady && handshakeStarted && !pendingInvite && (
+              <div className="px-4 py-2 text-sm text-muted-foreground border-b bg-muted/30 flex items-center gap-2">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Waiting for {otherUsername || "other user"} to accept...
+              </div>
+            )}
+
+            {/* Error */}
             {error && (
               <div className="px-4 py-2 text-sm text-red-500 border-b border-red-500/20 bg-red-500/5">
                 {error}
               </div>
             )}
 
-            {e2eeEnabled && !e2eeReady && handshakeStarted && !pendingInvite && !showDisableWarning && (
-              <div className="px-4 py-2 text-sm text-muted-foreground border-b bg-muted/30 flex items-center gap-2">
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Waiting for {otherUsername || "the other user"} to accept encryption ({algDisplayName})
-              </div>
-            )}
-
+            {/* Messages */}
             <div className="flex-1 overflow-hidden">
               <div className="h-full overflow-auto p-4 space-y-3">
                 {messages.map((m) => {
@@ -815,8 +782,8 @@ export default function MessagesPage() {
               </div>
             </div>
 
+            {/* Input Area */}
             <div className="border-t p-3">
-              {/* Hidden file input */}
               <input
                 type="file"
                 ref={imageInputRef}
@@ -826,44 +793,37 @@ export default function MessagesPage() {
               />
               
               <div className="flex gap-2">
-                {/* Image upload button */}
-                <Button
-                  variant="outline"
-                  size="icon"
+                <button
                   onClick={() => imageInputRef.current?.click()}
                   disabled={inputDisabled}
-                  className="h-[52px] w-[52px] shrink-0"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background hover:bg-muted transition disabled:opacity-50"
                   title="Send image"
                 >
                   {sendingImage ? (
                     <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                   ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-                      <circle cx="9" cy="9" r="2"/>
-                      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                    <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
                   )}
-                </Button>
+                </button>
 
-                <textarea
-                  className="flex-1 resize-none rounded-lg border bg-background p-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                <input
+                  type="text"
+                  className="flex-1 h-10 rounded-lg border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   placeholder={
-                    sendingImage
-                      ? "Sending image..."
+                    inputDisabled
+                      ? "Waiting for encryption..."
                       : e2eeEnabled
-                        ? e2eeReady
-                          ? "Write a message..."
-                          : "Waiting for encryption..."
-                        : "Write a message (not encrypted)..."
+                        ? "Type a message..."
+                        : "Type a message (unencrypted)..."
                   }
                   disabled={inputDisabled}
-                  rows={2}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
@@ -871,16 +831,18 @@ export default function MessagesPage() {
                     }
                   }}
                 />
-                <Button onClick={send} className="h-[52px]" disabled={inputDisabled}>
+                
+                <Button onClick={send} disabled={inputDisabled} className="h-10 px-4">
                   Send
                 </Button>
               </div>
-              <div className="mt-1 text-[11px] text-muted-foreground">
+              
+              <div className="mt-1.5 text-[11px] text-muted-foreground">
                 {e2eeEnabled && e2eeReady 
-                  ? `Messages are encrypted${showAlgBadge ? ` with ${algDisplayName}` : ""} · Images up to 2MB` 
+                  ? `🔐 End-to-end encrypted with ${algInfo.name}` 
                   : e2eeEnabled 
-                    ? "Encryption in progress..."
-                    : "Messages are not encrypted"}
+                    ? "Setting up encryption..."
+                    : "⚠️ Messages are not encrypted"}
               </div>
             </div>
           </div>

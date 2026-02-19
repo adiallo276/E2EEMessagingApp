@@ -17,7 +17,16 @@ import {
   MiniFrodoCiphertext,
 } from "@/lib/crypto/minifrodo";
 
-export type KemAlg = "kyber" | "frodo";
+import {
+  miniNtruKeyGen,
+  miniNtruEncapsulate,
+  miniNtruDecapsulate,
+  MiniNtruKeyPair,
+  MiniNtruPublicKey,
+  MiniNtruCiphertext,
+} from "@/lib/crypto/minintru";
+
+export type KemAlg = "kyber" | "frodo" | "ntru";
 
 export type E2eeHello = {
   type: "E2EE_HELLO";
@@ -131,6 +140,12 @@ export async function getOrCreateKeyPair(username: string, alg: KemAlg): Promise
     return kp;
   }
 
+  if (alg === "ntru") {
+    const kp = await miniNtruKeyGen();
+    localStorage.setItem(storageKey, JSON.stringify(kp));
+    return kp;
+  }
+
   throw new Error("Unknown KEM alg");
 }
 
@@ -164,6 +179,12 @@ export async function handleHelloAndCreateKeyReply(
     return { replyContent: makeKeyReply("frodo", enc.ct as MiniFrodoCiphertext, salt, info) };
   }
 
+  if (hello.alg === "ntru") {
+    const enc = await miniNtruEncapsulate(hello.pk as MiniNtruPublicKey);
+    await saveSessionFromSharedSecret(conversationId, "ntru", enc.sharedSecret, salt, info);
+    return { replyContent: makeKeyReply("ntru", enc.ct as MiniNtruCiphertext, salt, info) };
+  }
+
   return null;
 }
 
@@ -182,6 +203,13 @@ export async function handleKeyAndStoreSession(conversationId: string, myUsernam
     const kp = (await getOrCreateKeyPair(myUsername, "frodo")) as MiniFrodoKeyPair;
     const ss = await miniFrodoDecapsulate(kp.sk, keyMsg.ct as MiniFrodoCiphertext);
     await saveSessionFromSharedSecret(conversationId, "frodo", ss, salt, info);
+    return;
+  }
+
+  if (keyMsg.alg === "ntru") {
+    const kp = (await getOrCreateKeyPair(myUsername, "ntru")) as MiniNtruKeyPair;
+    const ss = await miniNtruDecapsulate(kp.sk, keyMsg.ct as MiniNtruCiphertext);
+    await saveSessionFromSharedSecret(conversationId, "ntru", ss, salt, info);
     return;
   }
 
