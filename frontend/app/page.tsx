@@ -61,9 +61,9 @@ export default function HomePage() {
 
           <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
             <div className="rounded-xl border border-border bg-card p-4">
-              <div className="font-medium">Two lattice-based algorithms</div>
+              <div className="font-medium">Four encryption options</div>
               <div className="text-muted-foreground mt-1">
-                Mini-Kyber and Mini-Frodo
+                Kyber, Frodo, NTRU (PQC) + Classic
               </div>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">

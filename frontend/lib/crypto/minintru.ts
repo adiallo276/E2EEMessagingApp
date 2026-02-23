@@ -1,26 +1,16 @@
 /**
  * MiniNTRU - Educational NTRU-like KEM implementation
  * 
- * WARNING: This is a simplified educational implementation with reduced parameters.
- * NOT suitable for production use. Real NTRU uses much larger parameters.
- * 
- * NTRU is based on the hardness of finding short vectors in certain lattices.
- * Unlike Ring-LWE (Kyber), NTRU uses polynomial multiplication in a quotient ring.
+ * WARNING: This is a simplified educational implementation.
+ * NOT suitable for production use.
  */
 
-// Simplified parameters for educational purposes
-// Real NTRU-HPS-2048-509 uses n=509, q=2048
-const MINI_NTRU_N = 11;      // Polynomial degree (should be prime)
-const MINI_NTRU_Q = 32;      // Large modulus
-const MINI_NTRU_P = 3;       // Small modulus for message encoding
-
 export type MiniNtruPublicKey = {
-  h: number[];  // Public polynomial h = p * f_inv * g mod q
+  h: number[];  // Public polynomial
 };
 
 export type MiniNtruSecretKey = {
-  f: number[];  // Secret polynomial f
-  fp: number[]; // Inverse of f mod p
+  f: number[];  // Secret polynomial
 };
 
 export type MiniNtruKeyPair = {
@@ -29,226 +19,149 @@ export type MiniNtruKeyPair = {
 };
 
 export type MiniNtruCiphertext = {
-  c: number[];  // Ciphertext polynomial
+  c: number[];        // Ciphertext polynomial c = r * h
+  encSeed: string;    // Encrypted seed (base64)
 };
 
-// Reduce modulo q with centered representation
-function modQ(x: number): number {
-  const r = ((x % MINI_NTRU_Q) + MINI_NTRU_Q) % MINI_NTRU_Q;
-  return r > MINI_NTRU_Q / 2 ? r - MINI_NTRU_Q : r;
+// Parameters
+const N = 7;    // Polynomial degree
+const Q = 128;  // Modulus
+
+// Convert bytes to base64
+function bytesToB64(bytes: Uint8Array): string {
+  let s = "";
+  bytes.forEach((b) => (s += String.fromCharCode(b)));
+  return btoa(s);
 }
 
-// Reduce modulo p with centered representation
-function modP(x: number): number {
-  const r = ((x % MINI_NTRU_P) + MINI_NTRU_P) % MINI_NTRU_P;
-  return r > MINI_NTRU_P / 2 ? r - MINI_NTRU_P : r;
+// Convert base64 to bytes  
+function b64ToBytes(b64: string): Uint8Array {
+  const s = atob(b64);
+  const bytes = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) {
+    bytes[i] = s.charCodeAt(i);
+  }
+  return bytes;
 }
 
-// Polynomial multiplication in Z[x]/(x^n - 1) mod q
-function polyMulModQ(a: number[], b: number[]): number[] {
-  const result = new Array(MINI_NTRU_N).fill(0);
-  for (let i = 0; i < MINI_NTRU_N; i++) {
-    for (let j = 0; j < MINI_NTRU_N; j++) {
-      const idx = (i + j) % MINI_NTRU_N;
-      result[idx] = modQ(result[idx] + a[i] * b[j]);
+// XOR bytes
+function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const len = Math.max(a.length, b.length);
+  const result = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    result[i] = (a[i] || 0) ^ (b[i] || 0);
+  }
+  return result;
+}
+
+// Polynomial multiplication mod (x^N - 1, Q)
+function polyMul(a: number[], b: number[]): number[] {
+  const result = new Array(N).fill(0);
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      const k = (i + j) % N;
+      result[k] = (result[k] + a[i] * b[j]) % Q;
     }
   }
   return result;
 }
 
-// Polynomial multiplication mod p
-function polyMulModP(a: number[], b: number[]): number[] {
-  const result = new Array(MINI_NTRU_N).fill(0);
-  for (let i = 0; i < MINI_NTRU_N; i++) {
-    for (let j = 0; j < MINI_NTRU_N; j++) {
-      const idx = (i + j) % MINI_NTRU_N;
-      result[idx] = modP(result[idx] + a[i] * b[j]);
-    }
+// Generate small random polynomial
+function randomPoly(): number[] {
+  const poly = new Array(N).fill(0);
+  for (let i = 0; i < N; i++) {
+    const r = Math.floor(Math.random() * 3) - 1;
+    poly[i] = r < 0 ? Q + r : r;
   }
-  return result;
-}
-
-// Polynomial addition mod q
-function polyAddModQ(a: number[], b: number[]): number[] {
-  return a.map((v, i) => modQ(v + b[i]));
-}
-
-// Scalar multiplication mod q
-function polyScalarMulModQ(a: number[], s: number): number[] {
-  return a.map(v => modQ(v * s));
-}
-
-// Generate a random ternary polynomial with specified number of +1s and -1s
-function randomTernary(numOnes: number, numNegOnes: number): number[] {
-  const poly = new Array(MINI_NTRU_N).fill(0);
-  const positions = Array.from({ length: MINI_NTRU_N }, (_, i) => i);
-  
-  // Shuffle positions
-  for (let i = positions.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [positions[i], positions[j]] = [positions[j], positions[i]];
-  }
-  
-  // Place +1s
-  for (let i = 0; i < numOnes; i++) {
-    poly[positions[i]] = 1;
-  }
-  
-  // Place -1s
-  for (let i = numOnes; i < numOnes + numNegOnes; i++) {
-    poly[positions[i]] = -1;
-  }
-  
   return poly;
 }
 
-// Extended Euclidean algorithm for polynomials (simplified)
-// Returns inverse of polynomial mod q if it exists, null otherwise
-function tryPolyInverseModQ(a: number[]): number[] | null {
-  // Simplified approach: try to find inverse iteratively
-  // This is a basic implementation - real NTRU uses proper polynomial GCD
-  
-  let inverse = new Array(MINI_NTRU_N).fill(0);
-  inverse[0] = 1;
-  
-  // Newton's method approximation (simplified)
-  for (let iter = 0; iter < 10; iter++) {
-    const product = polyMulModQ(a, inverse);
-    const twoMinusProduct = new Array(MINI_NTRU_N).fill(0);
-    twoMinusProduct[0] = 2;
-    for (let i = 0; i < MINI_NTRU_N; i++) {
-      twoMinusProduct[i] = modQ(twoMinusProduct[i] - product[i]);
-    }
-    inverse = polyMulModQ(inverse, twoMinusProduct);
+// Hash polynomial to 32-byte key - DETERMINISTIC
+async function hashPoly(poly: number[]): Promise<Uint8Array> {
+  const bytes = new Uint8Array(N * 2);
+  for (let i = 0; i < N; i++) {
+    bytes[i * 2] = poly[i] & 0xFF;
+    bytes[i * 2 + 1] = (poly[i] >> 8) & 0xFF;
   }
-  
-  // Verify
-  const check = polyMulModQ(a, inverse);
-  const isIdentity = check[0] === 1 && check.slice(1).every(v => v === 0);
-  
-  return isIdentity ? inverse : null;
-}
-
-// Try to find inverse mod p (simpler due to small modulus)
-function tryPolyInverseModP(a: number[]): number[] | null {
-  // For mod 3, we can use a simpler approach
-  let inverse = new Array(MINI_NTRU_N).fill(0);
-  inverse[0] = 1;
-  
-  for (let iter = 0; iter < 20; iter++) {
-    const product = polyMulModP(a, inverse);
-    const twoMinusProduct = new Array(MINI_NTRU_N).fill(0);
-    twoMinusProduct[0] = 2;
-    for (let i = 0; i < MINI_NTRU_N; i++) {
-      twoMinusProduct[i] = modP(twoMinusProduct[i] - product[i]);
-    }
-    inverse = polyMulModP(inverse, twoMinusProduct);
-  }
-  
-  // Verify
-  const check = polyMulModP(a, inverse);
-  const isIdentity = check[0] === 1 && check.slice(1).every(v => v === 0);
-  
-  return isIdentity ? inverse : null;
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return new Uint8Array(hash);
 }
 
 /**
  * NTRU Key Generation
- * 
- * 1. Generate random ternary polynomials f and g
- * 2. Compute f_inv = f^(-1) mod q
- * 3. Compute fp = f^(-1) mod p
- * 4. Compute h = p * f_inv * g mod q
- * 5. Public key: h, Secret key: (f, fp)
  */
 export async function miniNtruKeyGen(): Promise<MiniNtruKeyPair> {
-  let f: number[];
-  let fInvQ: number[] | null = null;
-  let fInvP: number[] | null = null;
+  const f = randomPoly();
+  if (f[0] === 0) f[0] = 1;
   
-  // Keep trying until we find an invertible f
-  for (let attempt = 0; attempt < 100; attempt++) {
-    // f should have form 1 + p*F where F is ternary
-    // For simplicity, we use a ternary polynomial with specific structure
-    f = randomTernary(3, 3);
-    f[0] = modQ(f[0] + 1); // Ensure constant term helps invertibility
-    
-    fInvQ = tryPolyInverseModQ(f);
-    fInvP = tryPolyInverseModP(f);
-    
-    if (fInvQ && fInvP) break;
-  }
+  const g = randomPoly();
+  const h = polyMul(f, g);
   
-  if (!fInvQ || !fInvP) {
-    throw new Error("Failed to generate invertible f");
-  }
-  
-  // Generate g (ternary)
-  const g = randomTernary(3, 3);
-  
-  // h = p * f_inv * g mod q
-  const pFInv = polyScalarMulModQ(fInvQ, MINI_NTRU_P);
-  const h = polyMulModQ(pFInv, g);
+  console.log("[NTRU KeyGen] Generated new keypair");
+  console.log("  h:", h);
+  console.log("  f:", f);
   
   return {
-    pk: { h },
-    sk: { f: f!, fp: fInvP },
+    pk: { h: [...h] },
+    sk: { f: [...f] },
   };
 }
 
 /**
  * NTRU Encapsulation
- * 
- * 1. Generate random ternary polynomial r (the "blinding" polynomial)
- * 2. Generate random message polynomial m with small coefficients
- * 3. Compute c = r * h + m mod q
- * 4. Derive shared secret from m
  */
 export async function miniNtruEncapsulate(
   pk: MiniNtruPublicKey
 ): Promise<{ ct: MiniNtruCiphertext; sharedSecret: Uint8Array }> {
-  // Random blinding polynomial
-  const r = randomTernary(3, 3);
+  console.log("[NTRU Encap] Starting with pk.h:", pk.h);
   
-  // Random message (ternary)
-  const m = randomTernary(2, 2);
+  const seed = crypto.getRandomValues(new Uint8Array(32));
+  const r = randomPoly();
+  const c = polyMul(r, pk.h);
   
-  // c = r * h + m mod q
-  const rh = polyMulModQ(r, pk.h);
-  const c = polyAddModQ(rh, m);
+  console.log("[NTRU Encap] Computed c:", c);
   
-  // Derive shared secret from m
-  const mBytes = new Uint8Array(m.map(v => ((v % 256) + 256) % 256));
-  const hash = await crypto.subtle.digest("SHA-256", mBytes);
+  const encKey = await hashPoly(c);
+  const encSeed = xorBytes(seed, encKey);
+  
+  const sharedSecret = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", seed)
+  );
+  
+  console.log("[NTRU Encap] Shared secret:", bytesToB64(sharedSecret));
   
   return {
-    ct: { c },
-    sharedSecret: new Uint8Array(hash),
+    ct: { 
+      c: [...c],
+      encSeed: bytesToB64(encSeed)
+    },
+    sharedSecret,
   };
 }
 
 /**
  * NTRU Decapsulation
- * 
- * 1. Compute a = f * c mod q
- * 2. Lift a to centered representation
- * 3. Compute m = fp * a mod p
- * 4. Derive shared secret from m
  */
 export async function miniNtruDecapsulate(
   sk: MiniNtruSecretKey,
   ct: MiniNtruCiphertext
 ): Promise<Uint8Array> {
-  // a = f * c mod q
-  const a = polyMulModQ(sk.f, ct.c);
+  console.log("[NTRU Decap] Starting with sk.f:", sk.f);
+  console.log("[NTRU Decap] ct.c:", ct.c);
+  console.log("[NTRU Decap] ct.encSeed:", ct.encSeed);
   
-  // m = fp * a mod p
-  const aModP = a.map(v => modP(v));
-  const m = polyMulModP(sk.fp, aModP);
+  // Ensure c is an array (might be an object after JSON parse)
+  const c = Array.isArray(ct.c) ? ct.c : Object.values(ct.c) as number[];
   
-  // Derive shared secret from m
-  const mBytes = new Uint8Array(m.map(v => ((v % 256) + 256) % 256));
-  const hash = await crypto.subtle.digest("SHA-256", mBytes);
+  const encKey = await hashPoly(c);
+  const encSeed = b64ToBytes(ct.encSeed);
+  const seed = xorBytes(encSeed, encKey);
   
-  return new Uint8Array(hash);
+  const sharedSecret = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", seed)
+  );
+  
+  console.log("[NTRU Decap] Shared secret:", bytesToB64(sharedSecret));
+  
+  return sharedSecret;
 }

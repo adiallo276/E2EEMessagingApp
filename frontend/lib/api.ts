@@ -19,9 +19,14 @@ export async function api(path: string, options: RequestInit = {}) {
     headers,
   });
 
-  if (!res.ok) {
+  if (!res.ok && res.status !== 204) {
     const text = await res.text();
     throw new Error(`API error ${res.status}: ${text}`);
+  }
+
+  // Handle 204 No Content
+  if (res.status === 204) {
+    return null;
   }
 
   const contentType = res.headers.get("content-type") || "";

@@ -129,6 +129,8 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
       return "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400";
     } else if (alg === "frodo") {
       return "bg-orange-500/20 text-orange-600 dark:text-orange-400";
+    } else if (alg === "ntru") {
+      return "bg-purple-500/20 text-purple-600 dark:text-purple-400";
     } else if (alg === "AES-GCM") {
       return "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400";
     } else if (alg === "HKDF") {
@@ -364,6 +366,39 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                       <div className="font-mono font-medium">
                         {summary.averages.frodoDecapsulate 
                           ? formatDuration(summary.averages.frodoDecapsulate) 
+                          : "—"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* NTRU */}
+                <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-2.5">
+                  <div className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-2">
+                    NTRU (Polynomial Ring)
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-[10px]">
+                    <div>
+                      <div className="text-muted-foreground">Key Gen</div>
+                      <div className="font-mono font-medium">
+                        {summary.averages.ntruKeygen 
+                          ? formatDuration(summary.averages.ntruKeygen) 
+                          : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Encap</div>
+                      <div className="font-mono font-medium">
+                        {summary.averages.ntruEncapsulate 
+                          ? formatDuration(summary.averages.ntruEncapsulate) 
+                          : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Decap</div>
+                      <div className="font-mono font-medium">
+                        {summary.averages.ntruDecapsulate 
+                          ? formatDuration(summary.averages.ntruDecapsulate) 
                           : "—"}
                       </div>
                     </div>

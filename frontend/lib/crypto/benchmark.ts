@@ -71,21 +71,17 @@ function addBenchmarkEvent(event: Omit<BenchmarkEvent, "id" | "timestamp">) {
   };
   benchmarkEvents.push(fullEvent);
   
-  // Keep only last 100 events
   if (benchmarkEvents.length > 100) {
     benchmarkEvents = benchmarkEvents.slice(-100);
   }
   
-  // Notify listeners
   benchmarkListeners.forEach(listener => listener([...benchmarkEvents]));
 }
 
 export function subscribeToBenchmarks(listener: (events: BenchmarkEvent[]) => void): () => void {
   benchmarkListeners.push(listener);
-  // Send current events immediately
   listener([...benchmarkEvents]);
   
-  // Return unsubscribe function
   return () => {
     benchmarkListeners = benchmarkListeners.filter(l => l !== listener);
   };
@@ -123,7 +119,125 @@ function sessionStorageKey(conversationId: string) {
   return `${SESSION_PREFIX}${conversationId}`;
 }
 
-// Benchmarked key generation
+// ============ ECDH Key Exchange (Classic) ============
+
+// ECDH types
+export type EcdhPublicKey = {
+  raw: string; // Base64 encoded raw public key
+};
+
+export type EcdhSecretKey = {
+  jwk: JsonWebKey; // JWK format for private key
+};
+
+export type EcdhKeyPair = {
+  pk: EcdhPublicKey;
+  sk: EcdhSecretKey;
+};
+
+export type EcdhCiphertext = {
+  ephemeralPk: string; // Base64 encoded ephemeral public key
+  sharedSecretHash: string; // Not transmitted, for verification only in debug
+};
+
+// Generate ECDH keypair
+export async function ecdhKeyGen(): Promise<EcdhKeyPair> {
+  const keyPair = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveBits"]
+  );
+  
+  const publicKeyRaw = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+  const privateKeyJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
+  
+  return {
+    pk: { raw: b64(new Uint8Array(publicKeyRaw)) },
+    sk: { jwk: privateKeyJwk },
+  };
+}
+
+// ECDH encapsulation (ephemeral key exchange)
+export async function ecdhEncapsulate(pk: EcdhPublicKey): Promise<{ ct: EcdhCiphertext; sharedSecret: Uint8Array }> {
+  // Generate ephemeral keypair
+  const ephemeralKeyPair = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveBits"]
+  );
+  
+  // Export ephemeral public key
+  const ephemeralPkRaw = await crypto.subtle.exportKey("raw", ephemeralKeyPair.publicKey);
+  
+  // Import recipient's public key
+  const recipientPkBytes = unb64(pk.raw);
+  const recipientPk = await crypto.subtle.importKey(
+    "raw",
+    recipientPkBytes,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    []
+  );
+  
+  // Derive shared secret
+  const sharedBits = await crypto.subtle.deriveBits(
+    { name: "ECDH", public: recipientPk },
+    ephemeralKeyPair.privateKey,
+    256
+  );
+  
+  // Hash the shared bits to get the shared secret
+  const sharedSecret = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", sharedBits)
+  );
+  
+  return {
+    ct: { 
+      ephemeralPk: b64(new Uint8Array(ephemeralPkRaw)),
+      sharedSecretHash: "" // Not used
+    },
+    sharedSecret,
+  };
+}
+
+// ECDH decapsulation
+export async function ecdhDecapsulate(sk: EcdhSecretKey, ct: EcdhCiphertext): Promise<Uint8Array> {
+  // Import our private key
+  const privateKey = await crypto.subtle.importKey(
+    "jwk",
+    sk.jwk,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    ["deriveBits"]
+  );
+  
+  // Import ephemeral public key from ciphertext
+  const ephemeralPkBytes = unb64(ct.ephemeralPk);
+  const ephemeralPk = await crypto.subtle.importKey(
+    "raw",
+    ephemeralPkBytes,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    []
+  );
+  
+  // Derive shared secret
+  const sharedBits = await crypto.subtle.deriveBits(
+    { name: "ECDH", public: ephemeralPk },
+    privateKey,
+    256
+  );
+  
+  // Hash the shared bits to get the shared secret
+  const sharedSecret = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", sharedBits)
+  );
+  
+  return sharedSecret;
+}
+
+// ============ Benchmarked Key Generation ============
+
 export async function benchmarkedGetOrCreateKeyPair(username: string, alg: KemAlg): Promise<any> {
   const storageKey = kpStorageKey(username, alg);
   const existing = localStorage.getItem(storageKey);
@@ -141,13 +255,14 @@ export async function benchmarkedGetOrCreateKeyPair(username: string, alg: KemAl
     kp = await miniFrodoKeyGen();
   } else if (alg === "ntru") {
     kp = await miniNtruKeyGen();
+  } else if (alg === "ecdh") {
+    kp = await ecdhKeyGen();
   } else {
     throw new Error("Unknown KEM alg");
   }
 
   const duration = performance.now() - start;
   
-  // Calculate key sizes
   const pkSize = JSON.stringify(kp.pk).length;
   const skSize = JSON.stringify(kp.sk).length;
 
@@ -182,7 +297,6 @@ export async function benchmarkedHandleHelloAndCreateKeyReply(
   let ct: any;
   let ctSize = 0;
 
-  // Encapsulation
   const encStart = performance.now();
   if (hello.alg === "kyber") {
     const enc = await miniKyberEncapsulate(hello.pk as MiniKyberPublicKey);
@@ -194,6 +308,10 @@ export async function benchmarkedHandleHelloAndCreateKeyReply(
     ct = enc.ct;
   } else if (hello.alg === "ntru") {
     const enc = await miniNtruEncapsulate(hello.pk as MiniNtruPublicKey);
+    sharedSecret = enc.sharedSecret;
+    ct = enc.ct;
+  } else if (hello.alg === "ecdh") {
+    const enc = await ecdhEncapsulate(hello.pk as EcdhPublicKey);
     sharedSecret = enc.sharedSecret;
     ct = enc.ct;
   } else {
@@ -214,7 +332,6 @@ export async function benchmarkedHandleHelloAndCreateKeyReply(
     },
   });
 
-  // Key derivation
   const deriveStart = performance.now();
   const keyMaterial = {
     alg: hello.alg,
@@ -274,7 +391,6 @@ export async function benchmarkedHandleKeyAndStoreSession(
   let keyDeriveMs = 0;
   let sharedSecret: Uint8Array;
 
-  // Decapsulation
   const decapStart = performance.now();
   if (keyMsg.alg === "kyber") {
     const kp = (await benchmarkedGetOrCreateKeyPair(myUsername, "kyber")) as MiniKyberKeyPair;
@@ -285,6 +401,9 @@ export async function benchmarkedHandleKeyAndStoreSession(
   } else if (keyMsg.alg === "ntru") {
     const kp = (await benchmarkedGetOrCreateKeyPair(myUsername, "ntru")) as MiniNtruKeyPair;
     sharedSecret = await miniNtruDecapsulate(kp.sk, keyMsg.ct as MiniNtruCiphertext);
+  } else if (keyMsg.alg === "ecdh") {
+    const kp = (await benchmarkedGetOrCreateKeyPair(myUsername, "ecdh")) as EcdhKeyPair;
+    sharedSecret = await ecdhDecapsulate(kp.sk, keyMsg.ct as EcdhCiphertext);
   } else {
     throw new Error("Unknown KEM alg");
   }
@@ -300,7 +419,6 @@ export async function benchmarkedHandleKeyAndStoreSession(
     },
   });
 
-  // Key derivation
   const deriveStart = performance.now();
   const keyMaterial = {
     alg: keyMsg.alg,
@@ -342,11 +460,9 @@ export async function benchmarkedEncryptChatMessage(
   conversationId: string, 
   plaintext: string
 ): Promise<{ ciphertext: string; benchmarks: { aesEncryptMs: number; keyDeriveMs: number } }> {
-  // Detect if this is an image message
   const isImage = plaintext.startsWith("IMG:");
   const inputBytes = new TextEncoder().encode(plaintext).length;
   
-  // Load and derive AES key
   const keyDeriveStart = performance.now();
   const raw = localStorage.getItem(sessionStorageKey(conversationId));
   if (!raw) throw new Error("E2EE not ready yet (no session key)");
@@ -358,7 +474,6 @@ export async function benchmarkedEncryptChatMessage(
   const key = await deriveAesKey(shared, salt, info);
   const keyDeriveMs = performance.now() - keyDeriveStart;
 
-  // AES encryption
   const aesStart = performance.now();
   const { ivB64, ciphertextB64 } = await aesGcmEncrypt(plaintext, key);
   const aesEncryptMs = performance.now() - aesStart;
@@ -395,7 +510,6 @@ export async function benchmarkedDecryptChatMessage(
   conversationId: string, 
   msg: E2eeMsg
 ): Promise<{ plaintext: string; benchmarks: { aesDecryptMs: number; keyDeriveMs: number } }> {
-  // Load and derive AES key
   const keyDeriveStart = performance.now();
   const raw = localStorage.getItem(sessionStorageKey(conversationId));
   if (!raw) throw new Error("E2EE not ready yet (no session key)");
@@ -407,12 +521,10 @@ export async function benchmarkedDecryptChatMessage(
   const key = await deriveAesKey(shared, salt, info);
   const keyDeriveMs = performance.now() - keyDeriveStart;
 
-  // AES decryption
   const aesStart = performance.now();
   const plaintext = await aesGcmDecrypt(msg.ivB64, msg.ciphertextB64, key);
   const aesDecryptMs = performance.now() - aesStart;
 
-  // Detect if this is an image message
   const isImage = plaintext.startsWith("IMG:");
   const outputBytes = new TextEncoder().encode(plaintext).length;
 
@@ -487,7 +599,6 @@ export type BenchmarkProgress = {
   total: number;
 };
 
-// Batch size for timing - run multiple ops in one measurement for accuracy
 const BATCH_SIZE = 10;
 
 export async function runKemBenchmark(
@@ -507,7 +618,6 @@ export async function runKemBenchmark(
   
   const warmupIterations = Math.min(50, Math.floor(iterations / 5) || 10);
   
-  // Warmup phase - let JIT compiler optimize
   onProgress?.({ phase: "Warming up JIT...", current: 0, total: warmupIterations });
   for (let i = 0; i < warmupIterations; i++) {
     const kp1 = await miniKyberKeyGen();
@@ -522,18 +632,14 @@ export async function runKemBenchmark(
     }
   }
   
-  // Small delay to let GC run
   await new Promise(resolve => setTimeout(resolve, 200));
   
-  // Calculate number of batches
   const numBatches = Math.ceil(iterations / BATCH_SIZE);
   
-  // Run Kyber benchmarks with batching
   for (let batch = 0; batch < numBatches; batch++) {
     const batchIterations = Math.min(BATCH_SIZE, iterations - batch * BATCH_SIZE);
     onProgress?.({ phase: "Benchmarking Kyber", current: batch * BATCH_SIZE, total: iterations });
     
-    // Batch KeyGen
     const kgStart = performance.now();
     const keyPairs: any[] = [];
     for (let i = 0; i < batchIterations; i++) {
@@ -550,7 +656,6 @@ export async function runKemBenchmark(
       kyberSizes.secretKey = JSON.stringify(keyPairs[0].sk).length;
     }
     
-    // Batch Encapsulate
     const encStart = performance.now();
     const encResults: any[] = [];
     for (let i = 0; i < batchIterations; i++) {
@@ -567,7 +672,6 @@ export async function runKemBenchmark(
       kyberSizes.sharedSecret = encResults[0].sharedSecret.length;
     }
     
-    // Batch Decapsulate
     const decStart = performance.now();
     for (let i = 0; i < batchIterations; i++) {
       await miniKyberDecapsulate(keyPairs[i].sk, encResults[i].ct);
@@ -578,19 +682,15 @@ export async function runKemBenchmark(
       kyberDecapTimes.push(decTimePerOp);
     }
     
-    // Yield to UI
     await new Promise(resolve => setTimeout(resolve, 0));
   }
   
-  // Small delay between algorithms
   await new Promise(resolve => setTimeout(resolve, 200));
   
-  // Run Frodo benchmarks with batching
   for (let batch = 0; batch < numBatches; batch++) {
     const batchIterations = Math.min(BATCH_SIZE, iterations - batch * BATCH_SIZE);
     onProgress?.({ phase: "Benchmarking Frodo", current: batch * BATCH_SIZE, total: iterations });
     
-    // Batch KeyGen
     const kgStart = performance.now();
     const keyPairs: any[] = [];
     for (let i = 0; i < batchIterations; i++) {
@@ -607,7 +707,6 @@ export async function runKemBenchmark(
       frodoSizes.secretKey = JSON.stringify(keyPairs[0].sk).length;
     }
     
-    // Batch Encapsulate
     const encStart = performance.now();
     const encResults: any[] = [];
     for (let i = 0; i < batchIterations; i++) {
@@ -624,7 +723,6 @@ export async function runKemBenchmark(
       frodoSizes.sharedSecret = encResults[0].sharedSecret.length;
     }
     
-    // Batch Decapsulate
     const decStart = performance.now();
     for (let i = 0; i < batchIterations; i++) {
       await miniFrodoDecapsulate(keyPairs[i].sk, encResults[i].ct);
@@ -635,7 +733,6 @@ export async function runKemBenchmark(
       frodoDecapTimes.push(decTimePerOp);
     }
     
-    // Yield to UI
     await new Promise(resolve => setTimeout(resolve, 0));
   }
   
@@ -664,13 +761,13 @@ export async function runKemBenchmark(
 export type ThroughputResults = {
   iterations: number;
   messagesPerSession: number;
-  messageSize: number; // bytes
+  messageSize: number;
   timestamp: number;
   kyber: {
     keyExchange: TimingStats;
     messageEncrypt: TimingStats;
     messageDecrypt: TimingStats;
-    totalSession: TimingStats; // key exchange + all messages
+    totalSession: TimingStats;
   };
   frodo: {
     keyExchange: TimingStats;
@@ -685,26 +782,22 @@ export type ThroughputResults = {
     totalSession: TimingStats;
   };
   summary: {
-    kyberVsEcdhPercent: number; // overhead vs ECDH
+    kyberVsEcdhPercent: number;
     frodoVsEcdhPercent: number;
-    kyberVsFrodoPercent: number; // how much faster/slower is Kyber vs Frodo
+    kyberVsFrodoPercent: number;
   };
 };
 
-// ECDH Key Exchange using Web Crypto API
-async function ecdhKeyExchange(): Promise<{ sharedSecret: Uint8Array; publicKey: ArrayBuffer; privateKey: CryptoKey }> {
-  // Generate ECDH key pair (P-256 curve)
+// Helper function for ECDH benchmark (full key exchange simulation)
+async function ecdhKeyExchangeBenchmark(): Promise<{ sharedSecret: Uint8Array }> {
   const keyPair = await crypto.subtle.generateKey(
     { name: "ECDH", namedCurve: "P-256" },
     true,
     ["deriveBits"]
   );
   
-  // Export public key for transmission
   const publicKey = await crypto.subtle.exportKey("raw", keyPair.publicKey);
   
-  // Simulate receiving the same public key (in real scenario, this would be from peer)
-  // For benchmarking, we do a full key agreement with ourselves
   const importedPeerKey = await crypto.subtle.importKey(
     "raw",
     publicKey,
@@ -713,17 +806,14 @@ async function ecdhKeyExchange(): Promise<{ sharedSecret: Uint8Array; publicKey:
     []
   );
   
-  // Derive shared secret
   const sharedBits = await crypto.subtle.deriveBits(
     { name: "ECDH", public: importedPeerKey },
     keyPair.privateKey,
-    256 // 32 bytes
+    256
   );
   
   return {
     sharedSecret: new Uint8Array(sharedBits),
-    publicKey,
-    privateKey: keyPair.privateKey,
   };
 }
 
@@ -734,7 +824,7 @@ export async function runThroughputBenchmark(
   onProgress?: (progress: BenchmarkProgress) => void
 ): Promise<ThroughputResults> {
   const messageSize = messageSizeKB * 1024;
-  const testMessage = "A".repeat(messageSize); // Generate test message
+  const testMessage = "A".repeat(messageSize);
   
   const kyberKeyExchangeTimes: number[] = [];
   const kyberEncryptTimes: number[] = [];
@@ -758,7 +848,6 @@ export async function runThroughputBenchmark(
     const enc = await miniKyberEncapsulate(kp.pk);
     await miniKyberDecapsulate(kp.sk, enc.ct);
     
-    // Derive a test key for AES warmup
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const info = new TextEncoder().encode("warmup");
     const aesKey = await deriveAesKey(enc.sharedSecret, salt, info);
@@ -768,7 +857,7 @@ export async function runThroughputBenchmark(
   
   await new Promise(resolve => setTimeout(resolve, 100));
   
-  const totalOps = iterations * 3; // Kyber, Frodo, AES-only
+  const totalOps = iterations * 3;
   let completedOps = 0;
   
   // Benchmark Kyber sessions
@@ -777,20 +866,17 @@ export async function runThroughputBenchmark(
     
     const sessionStart = performance.now();
     
-    // Key Exchange (KeyGen + Encapsulate + Decapsulate)
     const kexStart = performance.now();
     const kp = await miniKyberKeyGen();
     const { ct, sharedSecret: ss1 } = await miniKyberEncapsulate(kp.pk);
-    const ss2 = await miniKyberDecapsulate(kp.sk, ct);
+    await miniKyberDecapsulate(kp.sk, ct);
     const kexEnd = performance.now();
     kyberKeyExchangeTimes.push(kexEnd - kexStart);
     
-    // Derive AES key from shared secret
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const info = new TextEncoder().encode("kyber-benchmark");
     const aesKey = await deriveAesKey(ss1, salt, info);
     
-    // Send N messages (encrypt + decrypt each)
     let encryptTotal = 0;
     let decryptTotal = 0;
     for (let m = 0; m < messagesPerSession; m++) {
@@ -820,20 +906,17 @@ export async function runThroughputBenchmark(
     
     const sessionStart = performance.now();
     
-    // Key Exchange
     const kexStart = performance.now();
     const kp = await miniFrodoKeyGen();
     const { ct, sharedSecret: ss1 } = await miniFrodoEncapsulate(kp.pk);
-    const ss2 = await miniFrodoDecapsulate(kp.sk, ct);
+    await miniFrodoDecapsulate(kp.sk, ct);
     const kexEnd = performance.now();
     frodoKeyExchangeTimes.push(kexEnd - kexStart);
     
-    // Derive AES key
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const info = new TextEncoder().encode("frodo-benchmark");
     const aesKey = await deriveAesKey(ss1, salt, info);
     
-    // Send N messages
     let encryptTotal = 0;
     let decryptTotal = 0;
     for (let m = 0; m < messagesPerSession; m++) {
@@ -857,24 +940,21 @@ export async function runThroughputBenchmark(
   
   await new Promise(resolve => setTimeout(resolve, 100));
   
-  // Benchmark ECDH sessions (traditional key exchange)
+  // Benchmark ECDH sessions
   for (let i = 0; i < iterations; i++) {
     onProgress?.({ phase: "Benchmarking ECDH sessions", current: completedOps, total: totalOps });
     
     const sessionStart = performance.now();
     
-    // Key Exchange (ECDH)
     const kexStart = performance.now();
-    const { sharedSecret } = await ecdhKeyExchange();
+    const { sharedSecret } = await ecdhKeyExchangeBenchmark();
     const kexEnd = performance.now();
     ecdhKeyExchangeTimes.push(kexEnd - kexStart);
     
-    // Derive AES key from shared secret (same as PQC methods)
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const info = new TextEncoder().encode("ecdh-benchmark");
     const aesKey = await deriveAesKey(sharedSecret, salt, info);
     
-    // Send N messages (encrypt + decrypt each)
     let encryptTotal = 0;
     let decryptTotal = 0;
     for (let m = 0; m < messagesPerSession; m++) {
@@ -898,7 +978,6 @@ export async function runThroughputBenchmark(
   
   onProgress?.({ phase: "Complete", current: totalOps, total: totalOps });
   
-  // Calculate stats
   const kyberKeyExchange = calculateStats(kyberKeyExchangeTimes);
   const kyberEncrypt = calculateStats(kyberEncryptTimes);
   const kyberDecrypt = calculateStats(kyberDecryptTimes);
@@ -954,13 +1033,11 @@ export function exportBenchmarksToCSV(
 ): string {
   const lines: string[] = [];
   
-  // Header info
   lines.push("# PQC Benchmark Export");
   lines.push(`# Generated: ${new Date().toISOString()}`);
   lines.push(`# User Agent: ${typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A'}`);
   lines.push("");
   
-  // KEM Comparison Results (if available)
   if (benchmarkResults) {
     lines.push("# ============ KEM COMPARISON BENCHMARK ============");
     lines.push(`# Iterations: ${benchmarkResults.iterations}`);
@@ -979,20 +1056,8 @@ export function exportBenchmarksToCSV(
     lines.push(`Kyber,${benchmarkResults.kyber.sizes.publicKey},${benchmarkResults.kyber.sizes.secretKey},${benchmarkResults.kyber.sizes.ciphertext},${benchmarkResults.kyber.sizes.sharedSecret}`);
     lines.push(`Frodo,${benchmarkResults.frodo.sizes.publicKey},${benchmarkResults.frodo.sizes.secretKey},${benchmarkResults.frodo.sizes.ciphertext},${benchmarkResults.frodo.sizes.sharedSecret}`);
     lines.push("");
-    
-    // Raw samples for statistical analysis
-    lines.push("# Raw timing samples (ms)");
-    lines.push("Algorithm,Operation,Sample Index,Time (ms)");
-    benchmarkResults.kyber.keyGen.samples.forEach((t, i) => lines.push(`Kyber,KeyGen,${i + 1},${t.toFixed(4)}`));
-    benchmarkResults.kyber.encapsulate.samples.forEach((t, i) => lines.push(`Kyber,Encapsulate,${i + 1},${t.toFixed(4)}`));
-    benchmarkResults.kyber.decapsulate.samples.forEach((t, i) => lines.push(`Kyber,Decapsulate,${i + 1},${t.toFixed(4)}`));
-    benchmarkResults.frodo.keyGen.samples.forEach((t, i) => lines.push(`Frodo,KeyGen,${i + 1},${t.toFixed(4)}`));
-    benchmarkResults.frodo.encapsulate.samples.forEach((t, i) => lines.push(`Frodo,Encapsulate,${i + 1},${t.toFixed(4)}`));
-    benchmarkResults.frodo.decapsulate.samples.forEach((t, i) => lines.push(`Frodo,Decapsulate,${i + 1},${t.toFixed(4)}`));
-    lines.push("");
   }
   
-  // Throughput Results (if available)
   if (throughputResults) {
     lines.push("# ============ THROUGHPUT COMPARISON BENCHMARK ============");
     lines.push(`# Iterations: ${throughputResults.iterations}`);
@@ -1002,16 +1067,10 @@ export function exportBenchmarksToCSV(
     
     lines.push("Scenario,Metric,Average (ms),Std Dev (ms),Min (ms),Max (ms)");
     lines.push(`Kyber,Key Exchange,${throughputResults.kyber.keyExchange.avg.toFixed(4)},${throughputResults.kyber.keyExchange.stdDev.toFixed(4)},${throughputResults.kyber.keyExchange.min.toFixed(4)},${throughputResults.kyber.keyExchange.max.toFixed(4)}`);
-    lines.push(`Kyber,Message Encrypt,${throughputResults.kyber.messageEncrypt.avg.toFixed(4)},${throughputResults.kyber.messageEncrypt.stdDev.toFixed(4)},${throughputResults.kyber.messageEncrypt.min.toFixed(4)},${throughputResults.kyber.messageEncrypt.max.toFixed(4)}`);
-    lines.push(`Kyber,Message Decrypt,${throughputResults.kyber.messageDecrypt.avg.toFixed(4)},${throughputResults.kyber.messageDecrypt.stdDev.toFixed(4)},${throughputResults.kyber.messageDecrypt.min.toFixed(4)},${throughputResults.kyber.messageDecrypt.max.toFixed(4)}`);
     lines.push(`Kyber,Total Session,${throughputResults.kyber.totalSession.avg.toFixed(4)},${throughputResults.kyber.totalSession.stdDev.toFixed(4)},${throughputResults.kyber.totalSession.min.toFixed(4)},${throughputResults.kyber.totalSession.max.toFixed(4)}`);
     lines.push(`Frodo,Key Exchange,${throughputResults.frodo.keyExchange.avg.toFixed(4)},${throughputResults.frodo.keyExchange.stdDev.toFixed(4)},${throughputResults.frodo.keyExchange.min.toFixed(4)},${throughputResults.frodo.keyExchange.max.toFixed(4)}`);
-    lines.push(`Frodo,Message Encrypt,${throughputResults.frodo.messageEncrypt.avg.toFixed(4)},${throughputResults.frodo.messageEncrypt.stdDev.toFixed(4)},${throughputResults.frodo.messageEncrypt.min.toFixed(4)},${throughputResults.frodo.messageEncrypt.max.toFixed(4)}`);
-    lines.push(`Frodo,Message Decrypt,${throughputResults.frodo.messageDecrypt.avg.toFixed(4)},${throughputResults.frodo.messageDecrypt.stdDev.toFixed(4)},${throughputResults.frodo.messageDecrypt.min.toFixed(4)},${throughputResults.frodo.messageDecrypt.max.toFixed(4)}`);
     lines.push(`Frodo,Total Session,${throughputResults.frodo.totalSession.avg.toFixed(4)},${throughputResults.frodo.totalSession.stdDev.toFixed(4)},${throughputResults.frodo.totalSession.min.toFixed(4)},${throughputResults.frodo.totalSession.max.toFixed(4)}`);
     lines.push(`ECDH,Key Exchange,${throughputResults.ecdh.keyExchange.avg.toFixed(4)},${throughputResults.ecdh.keyExchange.stdDev.toFixed(4)},${throughputResults.ecdh.keyExchange.min.toFixed(4)},${throughputResults.ecdh.keyExchange.max.toFixed(4)}`);
-    lines.push(`ECDH,Message Encrypt,${throughputResults.ecdh.messageEncrypt.avg.toFixed(4)},${throughputResults.ecdh.messageEncrypt.stdDev.toFixed(4)},${throughputResults.ecdh.messageEncrypt.min.toFixed(4)},${throughputResults.ecdh.messageEncrypt.max.toFixed(4)}`);
-    lines.push(`ECDH,Message Decrypt,${throughputResults.ecdh.messageDecrypt.avg.toFixed(4)},${throughputResults.ecdh.messageDecrypt.stdDev.toFixed(4)},${throughputResults.ecdh.messageDecrypt.min.toFixed(4)},${throughputResults.ecdh.messageDecrypt.max.toFixed(4)}`);
     lines.push(`ECDH,Total Session,${throughputResults.ecdh.totalSession.avg.toFixed(4)},${throughputResults.ecdh.totalSession.stdDev.toFixed(4)},${throughputResults.ecdh.totalSession.min.toFixed(4)},${throughputResults.ecdh.totalSession.max.toFixed(4)}`);
     lines.push("");
     
@@ -1023,7 +1082,6 @@ export function exportBenchmarksToCSV(
     lines.push("");
   }
   
-  // Real-time events
   if (events.length > 0) {
     lines.push("# ============ REAL-TIME EVENTS ============");
     lines.push("Timestamp,Type,Algorithm,Operation,Duration (ms),Input Size (bytes),Output Size (bytes)");
@@ -1039,28 +1097,6 @@ export function exportBenchmarksToCSV(
         event.outputSize ?? "",
       ].join(","));
     });
-    lines.push("");
-    
-    // Summary statistics from events
-    const summary = getBenchmarkSummary();
-    lines.push("# ============ EVENT SUMMARY ============");
-    lines.push("Metric,Value");
-    lines.push(`Total Events,${events.length}`);
-    lines.push(`Key Generations,${summary.keygenEvents.length}`);
-    lines.push(`Encapsulations,${summary.encapsulateEvents.length}`);
-    lines.push(`Decapsulations,${summary.decapsulateEvents.length}`);
-    lines.push(`AES Encryptions,${summary.aesEncryptEvents.length}`);
-    lines.push(`AES Decryptions,${summary.aesDecryptEvents.length}`);
-    lines.push(`Handshakes,${summary.handshakeEvents.length}`);
-    
-    if (summary.averages.kyberKeygen) lines.push(`Kyber KeyGen Avg (ms),${summary.averages.kyberKeygen.toFixed(4)}`);
-    if (summary.averages.kyberEncapsulate) lines.push(`Kyber Encap Avg (ms),${summary.averages.kyberEncapsulate.toFixed(4)}`);
-    if (summary.averages.kyberDecapsulate) lines.push(`Kyber Decap Avg (ms),${summary.averages.kyberDecapsulate.toFixed(4)}`);
-    if (summary.averages.frodoKeygen) lines.push(`Frodo KeyGen Avg (ms),${summary.averages.frodoKeygen.toFixed(4)}`);
-    if (summary.averages.frodoEncapsulate) lines.push(`Frodo Encap Avg (ms),${summary.averages.frodoEncapsulate.toFixed(4)}`);
-    if (summary.averages.frodoDecapsulate) lines.push(`Frodo Decap Avg (ms),${summary.averages.frodoDecapsulate.toFixed(4)}`);
-    if (summary.averages.aesEncrypt) lines.push(`AES Encrypt Avg (ms),${summary.averages.aesEncrypt.toFixed(4)}`);
-    if (summary.averages.aesDecrypt) lines.push(`AES Decrypt Avg (ms),${summary.averages.aesDecrypt.toFixed(4)}`);
   }
   
   return lines.join("\n");
@@ -1077,13 +1113,13 @@ export function getBenchmarkSummary(): {
   averages: {
     kyberKeygen?: number;
     frodoKeygen?: number;
-    ntruKeygen?: number;
+    ecdhKeygen?: number;
     kyberEncapsulate?: number;
     frodoEncapsulate?: number;
-    ntruEncapsulate?: number;
+    ecdhEncapsulate?: number;
     kyberDecapsulate?: number;
     frodoDecapsulate?: number;
-    ntruDecapsulate?: number;
+    ecdhDecapsulate?: number;
     aesEncrypt?: number;
     aesDecrypt?: number;
   };
@@ -1109,13 +1145,13 @@ export function getBenchmarkSummary(): {
     averages: {
       kyberKeygen: avg(keygenEvents.filter(e => e.algorithm === "kyber").map(e => e.durationMs)),
       frodoKeygen: avg(keygenEvents.filter(e => e.algorithm === "frodo").map(e => e.durationMs)),
-      ntruKeygen: avg(keygenEvents.filter(e => e.algorithm === "ntru").map(e => e.durationMs)),
+      ecdhKeygen: avg(keygenEvents.filter(e => e.algorithm === "ecdh").map(e => e.durationMs)),
       kyberEncapsulate: avg(encapsulateEvents.filter(e => e.algorithm === "kyber").map(e => e.durationMs)),
       frodoEncapsulate: avg(encapsulateEvents.filter(e => e.algorithm === "frodo").map(e => e.durationMs)),
-      ntruEncapsulate: avg(encapsulateEvents.filter(e => e.algorithm === "ntru").map(e => e.durationMs)),
+      ecdhEncapsulate: avg(encapsulateEvents.filter(e => e.algorithm === "ecdh").map(e => e.durationMs)),
       kyberDecapsulate: avg(decapsulateEvents.filter(e => e.algorithm === "kyber").map(e => e.durationMs)),
       frodoDecapsulate: avg(decapsulateEvents.filter(e => e.algorithm === "frodo").map(e => e.durationMs)),
-      ntruDecapsulate: avg(decapsulateEvents.filter(e => e.algorithm === "ntru").map(e => e.durationMs)),
+      ecdhDecapsulate: avg(decapsulateEvents.filter(e => e.algorithm === "ecdh").map(e => e.durationMs)),
       aesEncrypt: avg(aesEncryptEvents.map(e => e.durationMs)),
       aesDecrypt: avg(aesDecryptEvents.map(e => e.durationMs)),
     },

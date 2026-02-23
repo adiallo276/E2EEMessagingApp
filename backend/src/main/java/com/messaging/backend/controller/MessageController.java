@@ -26,6 +26,17 @@ public class MessageController {
                 .toList();
     }
 
+    @GetMapping("/{conversationId}/last")
+    public org.springframework.http.ResponseEntity<MessageDto> lastMessage(@PathVariable Long conversationId, Principal principal) {
+        List<Message> msgs = messages.findByConversationId(conversationId);
+        if (msgs.isEmpty()) {
+            return org.springframework.http.ResponseEntity.noContent().build();
+        }
+        // Get the last message (most recent)
+        Message last = msgs.get(msgs.size() - 1);
+        return org.springframework.http.ResponseEntity.ok(toDto(last));
+    }
+
     private MessageDto toDto(Message m) {
         MessageDto d = new MessageDto();
         d.id = m.getId();

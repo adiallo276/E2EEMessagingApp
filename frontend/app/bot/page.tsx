@@ -2,7 +2,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import BenchmarkPanel from "@/components/ui/benchmark-panel";
 import {
   miniKyberKeyGen,
@@ -22,10 +21,14 @@ import {
 import { aesGcmEncrypt, aesGcmDecrypt, deriveAesKey } from "@/lib/crypto/aes";
 import { KemAlg } from "@/lib/crypto/e2ee";
 
+type MessageContent = 
+  | { type: "text"; text: string }
+  | { type: "image"; mimeType: string; data: string };
+
 type Message = {
   id: string;
   role: "user" | "assistant" | "system";
-  content: string;
+  content: MessageContent[];
   encrypted?: boolean;
   timestamp: Date;
 };
@@ -54,6 +57,7 @@ export default function BotChatPage() {
   const [apiKey, setApiKey] = useState("");
   const [showApiKeyInput, setShowApiKeyInput] = useState(true);
   const [showBenchmark, setShowBenchmark] = useState(false);
+  const [pendingImage, setPendingImage] = useState<{ mimeType: string; data: string } | null>(null);
   
   const [encryption, setEncryption] = useState<EncryptionState>({
     enabled: true,
@@ -62,9 +66,9 @@ export default function BotChatPage() {
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Load API key from localStorage
     const savedKey = localStorage.getItem("openai_api_key");
     if (savedKey) {
       setApiKey(savedKey);
@@ -80,7 +84,6 @@ export default function BotChatPage() {
     setError(null);
     
     try {
-      // Simulate key exchange by generating keypair and doing encapsulation
       const startTime = performance.now();
       
       let sharedSecret: Uint8Array;
@@ -141,15 +144,10 @@ export default function BotChatPage() {
         aesKey,
       });
       
-      // Add system message about encryption
       setMessages(prev => [...prev, {
         id: `system-${Date.now()}`,
         role: "system",
-        content: `🔐 Encryption established using ${ALG_INFO[alg].name}\n\n` +
-          `Key Generation: ${keyGenTime.toFixed(2)}ms\n` +
-          `Encapsulation: ${encapTime.toFixed(2)}ms\n` +
-          `Decapsulation: ${decapTime.toFixed(2)}ms\n` +
-          `Total: ${totalTime.toFixed(2)}ms`,
+        content: [{ type: "text", text: `🔐 Encryption established using ${ALG_INFO[alg].name}\n\nKey Generation: ${keyGenTime.toFixed(2)}ms\nEncapsulation: ${encapTime.toFixed(2)}ms\nDecapsulation: ${decapTime.toFixed(2)}ms\nTotal: ${totalTime.toFixed(2)}ms` }],
         timestamp: new Date(),
       }]);
       
@@ -158,50 +156,121 @@ export default function BotChatPage() {
     }
   }
 
-  async function encryptMessage(plaintext: string): Promise<{ ivB64: string; ciphertextB64: string }> {
-    if (!encryption.aesKey) throw new Error("No encryption key");
-    return aesGcmEncrypt(plaintext, encryption.aesKey);
+  async function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file");
+      return;
+    }
+
+    const maxSize = 4 * 1024 * 1024; // 4MB for GPT-4 Vision
+    if (file.size > maxSize) {
+      setError("Image must be smaller than 4MB");
+      return;
+    }
+
+    try {
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64 = result.split(",")[1];
+          resolve(base64);
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+      });
+
+      setPendingImage({ mimeType: file.type, data: base64Data });
+    } catch (err: any) {
+      setError(err?.message || "Failed to load image");
+    } finally {
+      if (imageInputRef.current) {
+        imageInputRef.current.value = "";
+      }
+    }
   }
 
-  async function decryptMessage(ivB64: string, ciphertextB64: string): Promise<string> {
-    if (!encryption.aesKey) throw new Error("No encryption key");
-    return aesGcmDecrypt(ivB64, ciphertextB64, encryption.aesKey);
+  function removePendingImage() {
+    setPendingImage(null);
   }
 
   async function sendMessage() {
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && !pendingImage) || isLoading) return;
     if (!apiKey) {
       setError("Please enter your OpenAI API key");
       setShowApiKeyInput(true);
       return;
     }
 
-    const userMessage = input.trim();
+    const userText = input.trim();
     setInput("");
     setIsLoading(true);
     setError(null);
+
+    // Build message content
+    const content: MessageContent[] = [];
+    if (userText) {
+      content.push({ type: "text", text: userText });
+    }
+    if (pendingImage) {
+      content.push({ type: "image", mimeType: pendingImage.mimeType, data: pendingImage.data });
+    }
+    
+    const currentImage = pendingImage;
+    setPendingImage(null);
 
     // Add user message
     const userMsg: Message = {
       id: `user-${Date.now()}`,
       role: "user",
-      content: userMessage,
+      content,
       encrypted: encryption.enabled && encryption.ready,
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMsg]);
 
     try {
-      // Prepare message for API (encrypt if enabled)
-      let messageForApi = userMessage;
+      // Build API messages (convert to OpenAI format)
+      const apiMessages = messages
+        .filter(m => m.role !== "system")
+        .map(m => {
+          const msgContent = m.content.map(c => {
+            if (c.type === "text") {
+              return { type: "text" as const, text: c.text };
+            } else {
+              return { 
+                type: "image_url" as const, 
+                image_url: { url: `data:${c.mimeType};base64,${c.data}` }
+              };
+            }
+          });
+          return { role: m.role, content: msgContent.length === 1 && msgContent[0].type === "text" ? msgContent[0].text : msgContent };
+        });
+
+      // Add current message
+      const currentContent = content.map(c => {
+        if (c.type === "text") {
+          return { type: "text" as const, text: c.text };
+        } else {
+          return { 
+            type: "image_url" as const, 
+            image_url: { url: `data:${c.mimeType};base64,${c.data}` }
+          };
+        }
+      });
       
-      if (encryption.enabled && encryption.ready) {
-        // For demonstration, we encrypt before sending and decrypt response
-        const encStart = performance.now();
-        const encrypted = await encryptMessage(userMessage);
-        const encTime = performance.now() - encStart;
-        console.log(`[E2EE] Encrypted message in ${encTime.toFixed(2)}ms`);
-      }
+      apiMessages.push({ 
+        role: "user", 
+        content: currentContent.length === 1 && currentContent[0].type === "text" 
+          ? currentContent[0].text 
+          : currentContent 
+      });
+
+      const hasImages = content.some(c => c.type === "image") || 
+        messages.some(m => m.content.some(c => c.type === "image"));
 
       // Call ChatGPT API
       const response = await fetch("/api/chat", {
@@ -209,10 +278,8 @@ export default function BotChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           apiKey,
-          messages: messages
-            .filter(m => m.role !== "system")
-            .map(m => ({ role: m.role, content: m.content }))
-            .concat([{ role: "user", content: userMessage }]),
+          messages: apiMessages,
+          hasImages,
         }),
       });
 
@@ -226,18 +293,10 @@ export default function BotChatPage() {
       const assistantMsg: Message = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
-        content: data.reply,
+        content: [{ type: "text", text: data.reply }],
         encrypted: encryption.enabled && encryption.ready,
         timestamp: new Date(),
       };
-
-      if (encryption.enabled && encryption.ready) {
-        // Simulate decryption timing
-        const decStart = performance.now();
-        // In real scenario, we'd decrypt here
-        const decTime = performance.now() - decStart;
-        console.log(`[E2EE] Processed response in ${decTime.toFixed(2)}ms`);
-      }
 
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
@@ -272,6 +331,7 @@ export default function BotChatPage() {
       algorithm: "kyber",
     });
     setMessages([]);
+    setPendingImage(null);
   }
 
   const algInfo = ALG_INFO[encryption.algorithm];
@@ -282,7 +342,7 @@ export default function BotChatPage() {
         {/* Header */}
         <div className="border-b px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => router.push("/messages")}>
+            <Button variant="ghost" size="sm" onClick={() => router.push("/conversations")}>
               <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
@@ -294,7 +354,7 @@ export default function BotChatPage() {
                 ChatGPT Bot
                 <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600">Testing</span>
               </div>
-              <div className="text-xs text-muted-foreground">Test E2EE without a second account</div>
+              <div className="text-xs text-muted-foreground">Test E2EE with text & images</div>
             </div>
           </div>
           
@@ -341,7 +401,7 @@ export default function BotChatPage() {
               <Button size="sm" onClick={saveApiKey}>Save</Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Your API key is stored locally and never sent to our servers.
+              Your API key is stored locally. Images use GPT-4o (Vision).
             </p>
           </div>
         )}
@@ -358,7 +418,7 @@ export default function BotChatPage() {
                 </div>
                 <div>
                   <div className="font-medium">Setup Encryption</div>
-                  <div className="text-sm text-muted-foreground">Select a PQC algorithm to begin</div>
+                  <div className="text-sm text-muted-foreground">Select a PQC algorithm</div>
                 </div>
               </div>
               
@@ -380,7 +440,7 @@ export default function BotChatPage() {
                 </div>
                 
                 <Button onClick={() => setupEncryption(encryption.algorithm)}>
-                  Start Encryption
+                  Start
                 </Button>
               </div>
             </div>
@@ -389,9 +449,9 @@ export default function BotChatPage() {
 
         {/* Error */}
         {error && (
-          <div className="px-4 py-2 text-sm text-red-500 bg-red-500/5 border-b">
-            {error}
-            <button onClick={() => setError(null)} className="ml-2 underline">Dismiss</button>
+          <div className="px-4 py-2 text-sm text-red-500 bg-red-500/5 border-b flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="text-xs underline">Dismiss</button>
           </div>
         )}
 
@@ -401,7 +461,7 @@ export default function BotChatPage() {
             <div className="text-center py-12 text-muted-foreground">
               <div className="text-4xl mb-3">🤖</div>
               <div className="font-medium">Ready to chat!</div>
-              <div className="text-sm">Send a message to test encryption with ChatGPT</div>
+              <div className="text-sm">Send text or images to test encryption</div>
             </div>
           )}
           
@@ -429,7 +489,20 @@ export default function BotChatPage() {
                     )}
                   </div>
                 )}
-                <div className="whitespace-pre-wrap">{msg.content}</div>
+                <div className="space-y-2">
+                  {msg.content.map((c, i) => (
+                    c.type === "text" ? (
+                      <div key={i} className="whitespace-pre-wrap">{c.text}</div>
+                    ) : (
+                      <img 
+                        key={i}
+                        src={`data:${c.mimeType};base64,${c.data}`}
+                        alt="Uploaded"
+                        className="max-w-full rounded-lg max-h-64 object-contain"
+                      />
+                    )
+                  ))}
+                </div>
               </div>
             </div>
           ))}
@@ -451,9 +524,47 @@ export default function BotChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Pending Image Preview */}
+        {pendingImage && (
+          <div className="px-4 py-2 border-t bg-muted/30">
+            <div className="flex items-center gap-2">
+              <img 
+                src={`data:${pendingImage.mimeType};base64,${pendingImage.data}`}
+                alt="To upload"
+                className="h-16 w-16 object-cover rounded-lg"
+              />
+              <div className="flex-1 text-sm text-muted-foreground">Image ready to send</div>
+              <Button variant="ghost" size="sm" onClick={removePendingImage}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Input */}
         <div className="border-t p-4">
+          <input
+            type="file"
+            ref={imageInputRef}
+            onChange={handleImageSelect}
+            accept="image/*"
+            className="hidden"
+          />
+          
           <div className="flex gap-2">
+            <button
+              onClick={() => imageInputRef.current?.click()}
+              disabled={!encryption.ready || isLoading}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-background hover:bg-muted transition disabled:opacity-50"
+              title="Attach image"
+            >
+              <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </button>
+            
             <input
               type="text"
               value={input}
@@ -463,6 +574,8 @@ export default function BotChatPage() {
                   ? "Setup encryption first..."
                   : isLoading
                   ? "Waiting for response..."
+                  : pendingImage
+                  ? "Add a message (optional)..."
                   : "Type a message..."
               }
               disabled={!encryption.ready || isLoading}
@@ -476,7 +589,7 @@ export default function BotChatPage() {
             />
             <Button
               onClick={sendMessage}
-              disabled={!encryption.ready || isLoading || !input.trim()}
+              disabled={!encryption.ready || isLoading || (!input.trim() && !pendingImage)}
               className="h-10 px-6"
             >
               Send
@@ -498,7 +611,6 @@ export default function BotChatPage() {
         </div>
       </div>
 
-      {/* Benchmark Panel */}
       <BenchmarkPanel isOpen={showBenchmark} onClose={() => setShowBenchmark(false)} />
     </div>
   );

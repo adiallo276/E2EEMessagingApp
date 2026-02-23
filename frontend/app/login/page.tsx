@@ -109,7 +109,7 @@ export default function LoginPage() {
             </div>
             <div className="rounded-xl border border-border bg-background p-4 text-sm">
               <div className="font-medium">PQC-ready architecture</div>
-              <div className="text-muted-foreground mt-1">Mini-Kyber and Mini-Frodo</div>
+              <div className="text-muted-foreground mt-1">Mini-Kyber, Mini-Frodo, and Mini-NTRU</div>
             </div>
           </div>
         </div>
@@ -150,6 +150,12 @@ export default function LoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && username && password && !busy) {
+                  e.preventDefault();
+                  mode === "login" ? handleLogin() : handleRegister();
+                }
+              }}
             />
             <input
               className="w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -158,6 +164,12 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && username && password && !busy) {
+                  e.preventDefault();
+                  mode === "login" ? handleLogin() : handleRegister();
+                }
+              }}
             />
 
             <Button

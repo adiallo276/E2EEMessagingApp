@@ -26,7 +26,8 @@ import {
   MiniNtruCiphertext,
 } from "@/lib/crypto/minintru";
 
-export type KemAlg = "kyber" | "frodo" | "ntru";
+// Algorithm types: kyber, frodo, ntru are post-quantum, ecdh is classical
+export type KemAlg = "kyber" | "frodo" | "ntru" | "ecdh";
 
 export type E2eeHello = {
   type: "E2EE_HELLO";
@@ -122,31 +123,128 @@ export async function loadAesKey(conversationId: string): Promise<CryptoKey | nu
   return deriveAesKey(shared, salt, info);
 }
 
+// ============ ECDH Implementation ============
+
+export type EcdhPublicKey = {
+  raw: string; // Base64 encoded raw public key
+};
+
+export type EcdhSecretKey = {
+  jwk: JsonWebKey; // JWK format for private key
+};
+
+export type EcdhKeyPair = {
+  pk: EcdhPublicKey;
+  sk: EcdhSecretKey;
+};
+
+export type EcdhCiphertext = {
+  ephemeralPk: string; // Base64 encoded ephemeral public key
+};
+
+async function ecdhKeyGen(): Promise<EcdhKeyPair> {
+  const keyPair = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveBits"]
+  );
+  
+  const publicKeyRaw = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+  const privateKeyJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
+  
+  return {
+    pk: { raw: b64(new Uint8Array(publicKeyRaw)) },
+    sk: { jwk: privateKeyJwk },
+  };
+}
+
+async function ecdhEncapsulate(pk: EcdhPublicKey): Promise<{ ct: EcdhCiphertext; sharedSecret: Uint8Array }> {
+  const ephemeralKeyPair = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveBits"]
+  );
+  
+  const ephemeralPkRaw = await crypto.subtle.exportKey("raw", ephemeralKeyPair.publicKey);
+  const recipientPkBytes = unb64(pk.raw);
+  const recipientPk = await crypto.subtle.importKey(
+    "raw",
+    recipientPkBytes,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    []
+  );
+  
+  const sharedBits = await crypto.subtle.deriveBits(
+    { name: "ECDH", public: recipientPk },
+    ephemeralKeyPair.privateKey,
+    256
+  );
+  
+  const sharedSecret = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", sharedBits)
+  );
+  
+  return {
+    ct: { ephemeralPk: b64(new Uint8Array(ephemeralPkRaw)) },
+    sharedSecret,
+  };
+}
+
+async function ecdhDecapsulate(sk: EcdhSecretKey, ct: EcdhCiphertext): Promise<Uint8Array> {
+  const privateKey = await crypto.subtle.importKey(
+    "jwk",
+    sk.jwk,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    ["deriveBits"]
+  );
+  
+  const ephemeralPkBytes = unb64(ct.ephemeralPk);
+  const ephemeralPk = await crypto.subtle.importKey(
+    "raw",
+    ephemeralPkBytes,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    []
+  );
+  
+  const sharedBits = await crypto.subtle.deriveBits(
+    { name: "ECDH", public: ephemeralPk },
+    privateKey,
+    256
+  );
+  
+  const sharedSecret = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", sharedBits)
+  );
+  
+  return sharedSecret;
+}
+
+// ============ Key Management ============
 
 export async function getOrCreateKeyPair(username: string, alg: KemAlg): Promise<any> {
   const storageKey = kpStorageKey(username, alg);
   const existing = localStorage.getItem(storageKey);
   if (existing) return JSON.parse(existing);
 
+  let kp: any;
+  
   if (alg === "kyber") {
-    const kp = await miniKyberKeyGen();
-    localStorage.setItem(storageKey, JSON.stringify(kp));
-    return kp;
+    kp = await miniKyberKeyGen();
+  } else if (alg === "frodo") {
+    kp = await miniFrodoKeyGen();
+  } else if (alg === "ntru") {
+    kp = await miniNtruKeyGen();
+  } else if (alg === "ecdh") {
+    kp = await ecdhKeyGen();
+  } else {
+    throw new Error("Unknown KEM alg");
   }
-
-  if (alg === "frodo") {
-    const kp = await miniFrodoKeyGen();
-    localStorage.setItem(storageKey, JSON.stringify(kp));
-    return kp;
-  }
-
-  if (alg === "ntru") {
-    const kp = await miniNtruKeyGen();
-    localStorage.setItem(storageKey, JSON.stringify(kp));
-    return kp;
-  }
-
-  throw new Error("Unknown KEM alg");
+  
+  localStorage.setItem(storageKey, JSON.stringify(kp));
+  return kp;
 }
 
 export function makeHello(alg: KemAlg, pk: any): string {
@@ -167,56 +265,59 @@ export async function handleHelloAndCreateKeyReply(
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const info = new TextEncoder().encode(`messaging-e2ee-v1:${hello.alg}:conv:${conversationId}`);
 
+  let sharedSecret: Uint8Array;
+  let ct: any;
+
   if (hello.alg === "kyber") {
     const enc = await miniKyberEncapsulate(hello.pk as MiniKyberPublicKey);
-    await saveSessionFromSharedSecret(conversationId, "kyber", enc.sharedSecret, salt, info);
-    return { replyContent: makeKeyReply("kyber", enc.ct as MiniKyberCiphertext, salt, info) };
-  }
-
-  if (hello.alg === "frodo") {
+    sharedSecret = enc.sharedSecret;
+    ct = enc.ct;
+  } else if (hello.alg === "frodo") {
     const enc = await miniFrodoEncapsulate(hello.pk as MiniFrodoPublicKey);
-    await saveSessionFromSharedSecret(conversationId, "frodo", enc.sharedSecret, salt, info);
-    return { replyContent: makeKeyReply("frodo", enc.ct as MiniFrodoCiphertext, salt, info) };
-  }
-
-  if (hello.alg === "ntru") {
+    sharedSecret = enc.sharedSecret;
+    ct = enc.ct;
+  } else if (hello.alg === "ntru") {
     const enc = await miniNtruEncapsulate(hello.pk as MiniNtruPublicKey);
-    await saveSessionFromSharedSecret(conversationId, "ntru", enc.sharedSecret, salt, info);
-    return { replyContent: makeKeyReply("ntru", enc.ct as MiniNtruCiphertext, salt, info) };
+    sharedSecret = enc.sharedSecret;
+    ct = enc.ct;
+  } else if (hello.alg === "ecdh") {
+    const enc = await ecdhEncapsulate(hello.pk as EcdhPublicKey);
+    sharedSecret = enc.sharedSecret;
+    ct = enc.ct;
+  } else {
+    return null;
   }
 
-  return null;
+  await saveSessionFromSharedSecret(conversationId, hello.alg, sharedSecret, salt, info);
+  return { replyContent: makeKeyReply(hello.alg, ct, salt, info) };
 }
 
 export async function handleKeyAndStoreSession(conversationId: string, myUsername: string, keyMsg: E2eeKey) {
   const salt = unb64(keyMsg.saltB64);
   const info = unb64(keyMsg.infoB64);
 
+  let sharedSecret: Uint8Array;
+
   if (keyMsg.alg === "kyber") {
     const kp = (await getOrCreateKeyPair(myUsername, "kyber")) as MiniKyberKeyPair;
-    const ss = await miniKyberDecapsulate(kp.sk, keyMsg.ct as MiniKyberCiphertext);
-    await saveSessionFromSharedSecret(conversationId, "kyber", ss, salt, info);
-    return;
-  }
-
-  if (keyMsg.alg === "frodo") {
+    sharedSecret = await miniKyberDecapsulate(kp.sk, keyMsg.ct as MiniKyberCiphertext);
+  } else if (keyMsg.alg === "frodo") {
     const kp = (await getOrCreateKeyPair(myUsername, "frodo")) as MiniFrodoKeyPair;
-    const ss = await miniFrodoDecapsulate(kp.sk, keyMsg.ct as MiniFrodoCiphertext);
-    await saveSessionFromSharedSecret(conversationId, "frodo", ss, salt, info);
-    return;
-  }
-
-  if (keyMsg.alg === "ntru") {
+    sharedSecret = await miniFrodoDecapsulate(kp.sk, keyMsg.ct as MiniFrodoCiphertext);
+  } else if (keyMsg.alg === "ntru") {
     const kp = (await getOrCreateKeyPair(myUsername, "ntru")) as MiniNtruKeyPair;
-    const ss = await miniNtruDecapsulate(kp.sk, keyMsg.ct as MiniNtruCiphertext);
-    await saveSessionFromSharedSecret(conversationId, "ntru", ss, salt, info);
-    return;
+    sharedSecret = await miniNtruDecapsulate(kp.sk, keyMsg.ct as MiniNtruCiphertext);
+  } else if (keyMsg.alg === "ecdh") {
+    const kp = (await getOrCreateKeyPair(myUsername, "ecdh")) as EcdhKeyPair;
+    sharedSecret = await ecdhDecapsulate(kp.sk, keyMsg.ct as EcdhCiphertext);
+  } else {
+    throw new Error("Unknown KEM alg");
   }
 
-  throw new Error("Unknown KEM alg");
+  await saveSessionFromSharedSecret(conversationId, keyMsg.alg, sharedSecret, salt, info);
 }
 
-// ---------- Encrypt / decrypt chat messages ----------
+// ============ Encrypt / decrypt chat messages ============
 
 export async function encryptChatMessage(conversationId: string, plaintext: string): Promise<string> {
   const key = await loadAesKey(conversationId);

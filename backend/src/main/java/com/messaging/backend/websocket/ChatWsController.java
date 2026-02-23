@@ -6,6 +6,8 @@ import com.messaging.backend.repository.MessageRepository;
 import com.messaging.backend.repository.UserRepository;
 import com.messaging.backend.websocket.dto.ChatMessageRequest;
 import com.messaging.backend.websocket.dto.MessageDto;
+import com.messaging.backend.websocket.dto.TypingEvent;
+import com.messaging.backend.websocket.dto.ReadReceipt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -13,6 +15,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
+import java.time.Instant;
 
 @Controller
 public class ChatWsController {
@@ -95,5 +98,46 @@ public class ChatWsController {
         d.ciphertextB64 = m.getCiphertextB64();
         d.timestamp = m.getTimestamp();
         return d;
+    }
+
+    @MessageMapping("/chat.typing")
+    public void typing(TypingEvent event, Principal principal) {
+        if (principal == null) {
+            throw new RuntimeException("Unauthenticated STOMP session");
+        }
+
+        String username = principal.getName();
+        
+        Conversation conversation = conversations.findById(event.conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+
+        if (!conversation.hasParticipant(username)) {
+            throw new RuntimeException("Forbidden");
+        }
+
+        // Broadcast typing event to conversation
+        event.username = username;
+        broker.convertAndSend("/topic/conversations/" + event.conversationId + "/typing", event);
+    }
+
+    @MessageMapping("/chat.read")
+    public void markRead(ReadReceipt receipt, Principal principal) {
+        if (principal == null) {
+            throw new RuntimeException("Unauthenticated STOMP session");
+        }
+
+        String username = principal.getName();
+        
+        Conversation conversation = conversations.findById(receipt.conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+
+        if (!conversation.hasParticipant(username)) {
+            throw new RuntimeException("Forbidden");
+        }
+
+        // Broadcast read receipt to conversation
+        receipt.username = username;
+        receipt.readAt = Instant.now();
+        broker.convertAndSend("/topic/conversations/" + receipt.conversationId + "/read", receipt);
     }
 }
