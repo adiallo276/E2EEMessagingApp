@@ -39,7 +39,7 @@ export default function ConversationsPage() {
       const env = JSON.parse(msg.content);
       if (env.type === "E2EE_HELLO") return "🔐 Encryption requested";
       if (env.type === "E2EE_KEY") return "✓ Encryption established";
-      if (env.type === "E2EE_MSG") return prefix + "🔒 Encrypted message";
+      if (env.type === "E2EE_MSG") return prefix + "🔒 Encrypted";
     } catch {
       if (msg.content.startsWith("IMG:")) {
         return prefix + "📷 Image";

@@ -578,6 +578,7 @@ export type BenchmarkResults = {
   timestamp: number;
   kyber: AlgorithmResults;
   frodo: AlgorithmResults;
+  ntru: AlgorithmResults;
 };
 
 function calculateStats(samples: number[]): TimingStats {
@@ -613,8 +614,13 @@ export async function runKemBenchmark(
   const frodoEncapTimes: number[] = [];
   const frodoDecapTimes: number[] = [];
   
+  const ntruKeyGenTimes: number[] = [];
+  const ntruEncapTimes: number[] = [];
+  const ntruDecapTimes: number[] = [];
+  
   let kyberSizes = { publicKey: 0, secretKey: 0, ciphertext: 0, sharedSecret: 0 };
   let frodoSizes = { publicKey: 0, secretKey: 0, ciphertext: 0, sharedSecret: 0 };
+  let ntruSizes = { publicKey: 0, secretKey: 0, ciphertext: 0, sharedSecret: 0 };
   
   const warmupIterations = Math.min(50, Math.floor(iterations / 5) || 10);
   
@@ -626,6 +632,9 @@ export async function runKemBenchmark(
     const kp2 = await miniFrodoKeyGen();
     const enc2 = await miniFrodoEncapsulate(kp2.pk);
     await miniFrodoDecapsulate(kp2.sk, enc2.ct);
+    const kp3 = await miniNtruKeyGen();
+    const enc3 = await miniNtruEncapsulate(kp3.pk);
+    await miniNtruDecapsulate(kp3.sk, enc3.ct);
     if (i % 10 === 0) {
       onProgress?.({ phase: "Warming up JIT...", current: i, total: warmupIterations });
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -736,6 +745,58 @@ export async function runKemBenchmark(
     await new Promise(resolve => setTimeout(resolve, 0));
   }
   
+  await new Promise(resolve => setTimeout(resolve, 200));
+  
+  // Benchmark NTRU
+  for (let batch = 0; batch < numBatches; batch++) {
+    const batchIterations = Math.min(BATCH_SIZE, iterations - batch * BATCH_SIZE);
+    onProgress?.({ phase: "Benchmarking NTRU", current: batch * BATCH_SIZE, total: iterations });
+    
+    const kgStart = performance.now();
+    const keyPairs: any[] = [];
+    for (let i = 0; i < batchIterations; i++) {
+      keyPairs.push(await miniNtruKeyGen());
+    }
+    const kgEnd = performance.now();
+    const kgTimePerOp = (kgEnd - kgStart) / batchIterations;
+    for (let i = 0; i < batchIterations; i++) {
+      ntruKeyGenTimes.push(kgTimePerOp);
+    }
+    
+    if (batch === 0) {
+      ntruSizes.publicKey = JSON.stringify(keyPairs[0].pk).length;
+      ntruSizes.secretKey = JSON.stringify(keyPairs[0].sk).length;
+    }
+    
+    const encStart = performance.now();
+    const encResults: any[] = [];
+    for (let i = 0; i < batchIterations; i++) {
+      encResults.push(await miniNtruEncapsulate(keyPairs[i].pk));
+    }
+    const encEnd = performance.now();
+    const encTimePerOp = (encEnd - encStart) / batchIterations;
+    for (let i = 0; i < batchIterations; i++) {
+      ntruEncapTimes.push(encTimePerOp);
+    }
+    
+    if (batch === 0) {
+      ntruSizes.ciphertext = JSON.stringify(encResults[0].ct).length;
+      ntruSizes.sharedSecret = encResults[0].sharedSecret.length;
+    }
+    
+    const decStart = performance.now();
+    for (let i = 0; i < batchIterations; i++) {
+      await miniNtruDecapsulate(keyPairs[i].sk, encResults[i].ct);
+    }
+    const decEnd = performance.now();
+    const decTimePerOp = (decEnd - decStart) / batchIterations;
+    for (let i = 0; i < batchIterations; i++) {
+      ntruDecapTimes.push(decTimePerOp);
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  
   onProgress?.({ phase: "Complete", current: iterations, total: iterations });
   
   return {
@@ -752,6 +813,12 @@ export async function runKemBenchmark(
       encapsulate: calculateStats(frodoEncapTimes),
       decapsulate: calculateStats(frodoDecapTimes),
       sizes: frodoSizes,
+    },
+    ntru: {
+      keyGen: calculateStats(ntruKeyGenTimes),
+      encapsulate: calculateStats(ntruEncapTimes),
+      decapsulate: calculateStats(ntruDecapTimes),
+      sizes: ntruSizes,
     },
   };
 }
@@ -775,6 +842,12 @@ export type ThroughputResults = {
     messageDecrypt: TimingStats;
     totalSession: TimingStats;
   };
+  ntru: {
+    keyExchange: TimingStats;
+    messageEncrypt: TimingStats;
+    messageDecrypt: TimingStats;
+    totalSession: TimingStats;
+  };
   ecdh: {
     keyExchange: TimingStats;
     messageEncrypt: TimingStats;
@@ -784,6 +857,7 @@ export type ThroughputResults = {
   summary: {
     kyberVsEcdhPercent: number;
     frodoVsEcdhPercent: number;
+    ntruVsEcdhPercent: number;
     kyberVsFrodoPercent: number;
   };
 };
@@ -836,6 +910,11 @@ export async function runThroughputBenchmark(
   const frodoDecryptTimes: number[] = [];
   const frodoTotalTimes: number[] = [];
   
+  const ntruKeyExchangeTimes: number[] = [];
+  const ntruEncryptTimes: number[] = [];
+  const ntruDecryptTimes: number[] = [];
+  const ntruTotalTimes: number[] = [];
+  
   const ecdhKeyExchangeTimes: number[] = [];
   const ecdhEncryptTimes: number[] = [];
   const ecdhDecryptTimes: number[] = [];
@@ -844,20 +923,28 @@ export async function runThroughputBenchmark(
   // Warmup
   onProgress?.({ phase: "Warming up...", current: 0, total: 10 });
   for (let i = 0; i < 10; i++) {
-    const kp = await miniKyberKeyGen();
-    const enc = await miniKyberEncapsulate(kp.pk);
-    await miniKyberDecapsulate(kp.sk, enc.ct);
+    const kp1 = await miniKyberKeyGen();
+    const enc1 = await miniKyberEncapsulate(kp1.pk);
+    await miniKyberDecapsulate(kp1.sk, enc1.ct);
+    
+    const kp2 = await miniFrodoKeyGen();
+    const enc2 = await miniFrodoEncapsulate(kp2.pk);
+    await miniFrodoDecapsulate(kp2.sk, enc2.ct);
+    
+    const kp3 = await miniNtruKeyGen();
+    const enc3 = await miniNtruEncapsulate(kp3.pk);
+    await miniNtruDecapsulate(kp3.sk, enc3.ct);
     
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const info = new TextEncoder().encode("warmup");
-    const aesKey = await deriveAesKey(enc.sharedSecret, salt, info);
+    const aesKey = await deriveAesKey(enc1.sharedSecret, salt, info);
     const encrypted = await aesGcmEncrypt(testMessage.slice(0, 100), aesKey);
     await aesGcmDecrypt(encrypted.ivB64, encrypted.ciphertextB64, aesKey);
   }
   
   await new Promise(resolve => setTimeout(resolve, 100));
   
-  const totalOps = iterations * 3;
+  const totalOps = iterations * 4; // Kyber, Frodo, NTRU, ECDH
   let completedOps = 0;
   
   // Benchmark Kyber sessions
@@ -940,6 +1027,46 @@ export async function runThroughputBenchmark(
   
   await new Promise(resolve => setTimeout(resolve, 100));
   
+  // Benchmark NTRU sessions
+  for (let i = 0; i < iterations; i++) {
+    onProgress?.({ phase: "Benchmarking NTRU sessions", current: completedOps, total: totalOps });
+    
+    const sessionStart = performance.now();
+    
+    const kexStart = performance.now();
+    const kp = await miniNtruKeyGen();
+    const { ct, sharedSecret: ss1 } = await miniNtruEncapsulate(kp.pk);
+    await miniNtruDecapsulate(kp.sk, ct);
+    const kexEnd = performance.now();
+    ntruKeyExchangeTimes.push(kexEnd - kexStart);
+    
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const info = new TextEncoder().encode("ntru-benchmark");
+    const aesKey = await deriveAesKey(ss1, salt, info);
+    
+    let encryptTotal = 0;
+    let decryptTotal = 0;
+    for (let m = 0; m < messagesPerSession; m++) {
+      const encStart = performance.now();
+      const encrypted = await aesGcmEncrypt(testMessage, aesKey);
+      encryptTotal += performance.now() - encStart;
+      
+      const decStart = performance.now();
+      await aesGcmDecrypt(encrypted.ivB64, encrypted.ciphertextB64, aesKey);
+      decryptTotal += performance.now() - decStart;
+    }
+    ntruEncryptTimes.push(encryptTotal / messagesPerSession);
+    ntruDecryptTimes.push(decryptTotal / messagesPerSession);
+    
+    const sessionEnd = performance.now();
+    ntruTotalTimes.push(sessionEnd - sessionStart);
+    
+    completedOps++;
+    if (i % 5 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
   // Benchmark ECDH sessions
   for (let i = 0; i < iterations; i++) {
     onProgress?.({ phase: "Benchmarking ECDH sessions", current: completedOps, total: totalOps });
@@ -988,6 +1115,11 @@ export async function runThroughputBenchmark(
   const frodoDecrypt = calculateStats(frodoDecryptTimes);
   const frodoTotal = calculateStats(frodoTotalTimes);
   
+  const ntruKeyExchange = calculateStats(ntruKeyExchangeTimes);
+  const ntruEncrypt = calculateStats(ntruEncryptTimes);
+  const ntruDecrypt = calculateStats(ntruDecryptTimes);
+  const ntruTotal = calculateStats(ntruTotalTimes);
+  
   const ecdhKeyExchange = calculateStats(ecdhKeyExchangeTimes);
   const ecdhEncrypt = calculateStats(ecdhEncryptTimes);
   const ecdhDecrypt = calculateStats(ecdhDecryptTimes);
@@ -1010,6 +1142,12 @@ export async function runThroughputBenchmark(
       messageDecrypt: frodoDecrypt,
       totalSession: frodoTotal,
     },
+    ntru: {
+      keyExchange: ntruKeyExchange,
+      messageEncrypt: ntruEncrypt,
+      messageDecrypt: ntruDecrypt,
+      totalSession: ntruTotal,
+    },
     ecdh: {
       keyExchange: ecdhKeyExchange,
       messageEncrypt: ecdhEncrypt,
@@ -1019,6 +1157,7 @@ export async function runThroughputBenchmark(
     summary: {
       kyberVsEcdhPercent: ((kyberTotal.avg - ecdhTotal.avg) / ecdhTotal.avg) * 100,
       frodoVsEcdhPercent: ((frodoTotal.avg - ecdhTotal.avg) / ecdhTotal.avg) * 100,
+      ntruVsEcdhPercent: ((ntruTotal.avg - ecdhTotal.avg) / ecdhTotal.avg) * 100,
       kyberVsFrodoPercent: ((frodoTotal.avg - kyberTotal.avg) / kyberTotal.avg) * 100,
     },
   };
@@ -1050,11 +1189,15 @@ export function exportBenchmarksToCSV(
     lines.push(`Frodo,KeyGen,${benchmarkResults.frodo.keyGen.avg.toFixed(4)},${benchmarkResults.frodo.keyGen.stdDev.toFixed(4)},${benchmarkResults.frodo.keyGen.min.toFixed(4)},${benchmarkResults.frodo.keyGen.max.toFixed(4)}`);
     lines.push(`Frodo,Encapsulate,${benchmarkResults.frodo.encapsulate.avg.toFixed(4)},${benchmarkResults.frodo.encapsulate.stdDev.toFixed(4)},${benchmarkResults.frodo.encapsulate.min.toFixed(4)},${benchmarkResults.frodo.encapsulate.max.toFixed(4)}`);
     lines.push(`Frodo,Decapsulate,${benchmarkResults.frodo.decapsulate.avg.toFixed(4)},${benchmarkResults.frodo.decapsulate.stdDev.toFixed(4)},${benchmarkResults.frodo.decapsulate.min.toFixed(4)},${benchmarkResults.frodo.decapsulate.max.toFixed(4)}`);
+    lines.push(`NTRU,KeyGen,${benchmarkResults.ntru.keyGen.avg.toFixed(4)},${benchmarkResults.ntru.keyGen.stdDev.toFixed(4)},${benchmarkResults.ntru.keyGen.min.toFixed(4)},${benchmarkResults.ntru.keyGen.max.toFixed(4)}`);
+    lines.push(`NTRU,Encapsulate,${benchmarkResults.ntru.encapsulate.avg.toFixed(4)},${benchmarkResults.ntru.encapsulate.stdDev.toFixed(4)},${benchmarkResults.ntru.encapsulate.min.toFixed(4)},${benchmarkResults.ntru.encapsulate.max.toFixed(4)}`);
+    lines.push(`NTRU,Decapsulate,${benchmarkResults.ntru.decapsulate.avg.toFixed(4)},${benchmarkResults.ntru.decapsulate.stdDev.toFixed(4)},${benchmarkResults.ntru.decapsulate.min.toFixed(4)},${benchmarkResults.ntru.decapsulate.max.toFixed(4)}`);
     lines.push("");
     
     lines.push("Algorithm,Public Key (bytes),Secret Key (bytes),Ciphertext (bytes),Shared Secret (bytes)");
     lines.push(`Kyber,${benchmarkResults.kyber.sizes.publicKey},${benchmarkResults.kyber.sizes.secretKey},${benchmarkResults.kyber.sizes.ciphertext},${benchmarkResults.kyber.sizes.sharedSecret}`);
     lines.push(`Frodo,${benchmarkResults.frodo.sizes.publicKey},${benchmarkResults.frodo.sizes.secretKey},${benchmarkResults.frodo.sizes.ciphertext},${benchmarkResults.frodo.sizes.sharedSecret}`);
+    lines.push(`NTRU,${benchmarkResults.ntru.sizes.publicKey},${benchmarkResults.ntru.sizes.secretKey},${benchmarkResults.ntru.sizes.ciphertext},${benchmarkResults.ntru.sizes.sharedSecret}`);
     lines.push("");
   }
   
@@ -1070,6 +1213,8 @@ export function exportBenchmarksToCSV(
     lines.push(`Kyber,Total Session,${throughputResults.kyber.totalSession.avg.toFixed(4)},${throughputResults.kyber.totalSession.stdDev.toFixed(4)},${throughputResults.kyber.totalSession.min.toFixed(4)},${throughputResults.kyber.totalSession.max.toFixed(4)}`);
     lines.push(`Frodo,Key Exchange,${throughputResults.frodo.keyExchange.avg.toFixed(4)},${throughputResults.frodo.keyExchange.stdDev.toFixed(4)},${throughputResults.frodo.keyExchange.min.toFixed(4)},${throughputResults.frodo.keyExchange.max.toFixed(4)}`);
     lines.push(`Frodo,Total Session,${throughputResults.frodo.totalSession.avg.toFixed(4)},${throughputResults.frodo.totalSession.stdDev.toFixed(4)},${throughputResults.frodo.totalSession.min.toFixed(4)},${throughputResults.frodo.totalSession.max.toFixed(4)}`);
+    lines.push(`NTRU,Key Exchange,${throughputResults.ntru.keyExchange.avg.toFixed(4)},${throughputResults.ntru.keyExchange.stdDev.toFixed(4)},${throughputResults.ntru.keyExchange.min.toFixed(4)},${throughputResults.ntru.keyExchange.max.toFixed(4)}`);
+    lines.push(`NTRU,Total Session,${throughputResults.ntru.totalSession.avg.toFixed(4)},${throughputResults.ntru.totalSession.stdDev.toFixed(4)},${throughputResults.ntru.totalSession.min.toFixed(4)},${throughputResults.ntru.totalSession.max.toFixed(4)}`);
     lines.push(`ECDH,Key Exchange,${throughputResults.ecdh.keyExchange.avg.toFixed(4)},${throughputResults.ecdh.keyExchange.stdDev.toFixed(4)},${throughputResults.ecdh.keyExchange.min.toFixed(4)},${throughputResults.ecdh.keyExchange.max.toFixed(4)}`);
     lines.push(`ECDH,Total Session,${throughputResults.ecdh.totalSession.avg.toFixed(4)},${throughputResults.ecdh.totalSession.stdDev.toFixed(4)},${throughputResults.ecdh.totalSession.min.toFixed(4)},${throughputResults.ecdh.totalSession.max.toFixed(4)}`);
     lines.push("");
@@ -1078,7 +1223,7 @@ export function exportBenchmarksToCSV(
     lines.push("Metric,Value (%)");
     lines.push(`Kyber overhead vs ECDH,${throughputResults.summary.kyberVsEcdhPercent.toFixed(2)}`);
     lines.push(`Frodo overhead vs ECDH,${throughputResults.summary.frodoVsEcdhPercent.toFixed(2)}`);
-    lines.push(`Frodo vs Kyber (positive = Frodo slower),${throughputResults.summary.kyberVsFrodoPercent.toFixed(2)}`);
+    lines.push(`NTRU overhead vs ECDH,${throughputResults.summary.ntruVsEcdhPercent.toFixed(2)}`);
     lines.push("");
   }
   
@@ -1113,12 +1258,15 @@ export function getBenchmarkSummary(): {
   averages: {
     kyberKeygen?: number;
     frodoKeygen?: number;
+    ntruKeygen?: number;
     ecdhKeygen?: number;
     kyberEncapsulate?: number;
     frodoEncapsulate?: number;
+    ntruEncapsulate?: number;
     ecdhEncapsulate?: number;
     kyberDecapsulate?: number;
     frodoDecapsulate?: number;
+    ntruDecapsulate?: number;
     ecdhDecapsulate?: number;
     aesEncrypt?: number;
     aesDecrypt?: number;
@@ -1145,12 +1293,15 @@ export function getBenchmarkSummary(): {
     averages: {
       kyberKeygen: avg(keygenEvents.filter(e => e.algorithm === "kyber").map(e => e.durationMs)),
       frodoKeygen: avg(keygenEvents.filter(e => e.algorithm === "frodo").map(e => e.durationMs)),
+      ntruKeygen: avg(keygenEvents.filter(e => e.algorithm === "ntru").map(e => e.durationMs)),
       ecdhKeygen: avg(keygenEvents.filter(e => e.algorithm === "ecdh").map(e => e.durationMs)),
       kyberEncapsulate: avg(encapsulateEvents.filter(e => e.algorithm === "kyber").map(e => e.durationMs)),
       frodoEncapsulate: avg(encapsulateEvents.filter(e => e.algorithm === "frodo").map(e => e.durationMs)),
+      ntruEncapsulate: avg(encapsulateEvents.filter(e => e.algorithm === "ntru").map(e => e.durationMs)),
       ecdhEncapsulate: avg(encapsulateEvents.filter(e => e.algorithm === "ecdh").map(e => e.durationMs)),
       kyberDecapsulate: avg(decapsulateEvents.filter(e => e.algorithm === "kyber").map(e => e.durationMs)),
       frodoDecapsulate: avg(decapsulateEvents.filter(e => e.algorithm === "frodo").map(e => e.durationMs)),
+      ntruDecapsulate: avg(decapsulateEvents.filter(e => e.algorithm === "ntru").map(e => e.durationMs)),
       ecdhDecapsulate: avg(decapsulateEvents.filter(e => e.algorithm === "ecdh").map(e => e.durationMs)),
       aesEncrypt: avg(aesEncryptEvents.map(e => e.durationMs)),
       aesDecrypt: avg(aesDecryptEvents.map(e => e.durationMs)),

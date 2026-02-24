@@ -1,16 +1,10 @@
-/**
- * MiniNTRU - Educational NTRU-like KEM implementation
- * 
- * WARNING: This is a simplified educational implementation.
- * NOT suitable for production use.
- */
 
 export type MiniNtruPublicKey = {
-  h: number[];  // Public polynomial
+  h: number[]; 
 };
 
 export type MiniNtruSecretKey = {
-  f: number[];  // Secret polynomial
+  f: number[]; 
 };
 
 export type MiniNtruKeyPair = {
@@ -19,22 +13,20 @@ export type MiniNtruKeyPair = {
 };
 
 export type MiniNtruCiphertext = {
-  c: number[];        // Ciphertext polynomial c = r * h
-  encSeed: string;    // Encrypted seed (base64)
+  c: number[];     
+  encSeed: string;   
 };
 
 // Parameters
-const N = 7;    // Polynomial degree
-const Q = 128;  // Modulus
+const N = 7;   
+const Q = 128;
 
-// Convert bytes to base64
 function bytesToB64(bytes: Uint8Array): string {
   let s = "";
   bytes.forEach((b) => (s += String.fromCharCode(b)));
   return btoa(s);
 }
-
-// Convert base64 to bytes  
+ 
 function b64ToBytes(b64: string): Uint8Array {
   const s = atob(b64);
   const bytes = new Uint8Array(s.length);

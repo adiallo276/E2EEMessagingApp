@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
           {
             role: "system",
             content:
-              "You are a helpful assistant in a secure messaging app. Keep responses concise and friendly. You are being used to test end-to-end encryption features. When analyzing images, describe what you see clearly and helpfully.",
+              "You are a helpful assistant in a secure messaging app. You are being used to test end-to-end encryption features. When analyzing images, describe what you see clearly and helpfully, and provide nice and long responses to the user messages.",
           },
           ...messages,
         ],

@@ -24,7 +24,6 @@ export async function api(path: string, options: RequestInit = {}) {
     throw new Error(`API error ${res.status}: ${text}`);
   }
 
-  // Handle 204 No Content
   if (res.status === 204) {
     return null;
   }

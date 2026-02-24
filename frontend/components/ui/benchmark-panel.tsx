@@ -140,89 +140,86 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
   };
 
   return (
-    <div className="w-96 border-l border-border bg-card flex flex-col h-full">
-      {/* Header */}
-      <div className="p-3 border-b border-border flex items-center justify-between">
+    <div className="w-96 border-l border-border bg-muted/30 flex flex-col h-full">
+      {/* Header - matches main chat header height */}
+      <div className="h-14 px-4 border-b border-border flex items-center justify-between bg-background">
         <div>
-          <div className="font-medium text-sm">Benchmark Panel</div>
-          <div className="text-xs text-muted-foreground">
+          <h2 className="font-semibold text-sm">Benchmarks</h2>
+          <p className="text-xs text-muted-foreground">
             {events.length} events recorded
-          </div>
+          </p>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
             onClick={handleExport}
-            className="h-7 px-2 text-xs"
+            className="h-8 px-2 text-xs"
             title="Export to CSV"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" x2="12" y1="15" y2="3"/>
-            </svg>
             Export
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => clearBenchmarks()}
-            className="h-7 px-2 text-xs"
+            onClick={() => {
+              clearBenchmarks();
+              setBenchmarkResults(null);
+              setThroughputResults(null);
+            }}
+            className="h-8 px-2 text-xs"
           >
             Clear
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
             onClick={onClose}
-            className="h-7 w-7 p-0"
+            className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-muted transition-colors"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+            <svg className="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
-          </Button>
+          </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-border">
+      <div className="flex border-b border-border bg-background">
         <button
           onClick={() => setActiveTab("events")}
-          className={`flex-1 px-3 py-2 text-xs font-medium transition ${
+          className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${
             activeTab === "events"
-              ? "text-foreground border-b-2 border-primary"
-              : "text-muted-foreground hover:text-foreground"
+              ? "text-foreground border-b-2 border-primary bg-muted/30"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/20"
           }`}
         >
           Events
         </button>
         <button
           onClick={() => setActiveTab("summary")}
-          className={`flex-1 px-3 py-2 text-xs font-medium transition ${
+          className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${
             activeTab === "summary"
-              ? "text-foreground border-b-2 border-primary"
-              : "text-muted-foreground hover:text-foreground"
+              ? "text-foreground border-b-2 border-primary bg-muted/30"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/20"
           }`}
         >
           Summary
         </button>
         <button
           onClick={() => setActiveTab("compare")}
-          className={`flex-1 px-3 py-2 text-xs font-medium transition ${
+          className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${
             activeTab === "compare"
-              ? "text-foreground border-b-2 border-primary"
-              : "text-muted-foreground hover:text-foreground"
+              ? "text-foreground border-b-2 border-primary bg-muted/30"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/20"
           }`}
         >
           KEM
         </button>
         <button
           onClick={() => setActiveTab("throughput")}
-          className={`flex-1 px-3 py-2 text-xs font-medium transition ${
+          className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${
             activeTab === "throughput"
-              ? "text-foreground border-b-2 border-primary"
-              : "text-muted-foreground hover:text-foreground"
+              ? "text-foreground border-b-2 border-primary bg-muted/30"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/20"
           }`}
         >
           Throughput
@@ -405,6 +402,39 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                   </div>
                 </div>
 
+                {/* ECDH */}
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5">
+                  <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-2">
+                    ECDH (P-256)
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-[10px]">
+                    <div>
+                      <div className="text-muted-foreground">Key Gen</div>
+                      <div className="font-mono font-medium">
+                        {summary.averages.ecdhKeygen 
+                          ? formatDuration(summary.averages.ecdhKeygen) 
+                          : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Encap</div>
+                      <div className="font-mono font-medium">
+                        {summary.averages.ecdhEncapsulate 
+                          ? formatDuration(summary.averages.ecdhEncapsulate) 
+                          : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Decap</div>
+                      <div className="font-mono font-medium">
+                        {summary.averages.ecdhDecapsulate 
+                          ? formatDuration(summary.averages.ecdhDecapsulate) 
+                          : "—"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* AES */}
                 <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5">
                   <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-2">
@@ -538,7 +568,7 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
               )}
               
               <p className="text-[10px] text-muted-foreground mt-2">
-                Runs {iterations} iterations of KeyGen, Encapsulation, and Decapsulation for both Kyber and Frodo.
+                Runs {iterations} iterations of KeyGen, Encapsulation, and Decapsulation for Kyber, Frodo, and NTRU.
                 Includes warmup phase for JIT optimization.
               </p>
               
@@ -567,7 +597,7 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                       <div>Operation</div>
                       <div className="text-right text-indigo-600 dark:text-indigo-400">Kyber</div>
                       <div className="text-right text-orange-600 dark:text-orange-400">Frodo</div>
-                      <div className="text-right">Diff</div>
+                      <div className="text-right text-purple-600 dark:text-purple-400">NTRU</div>
                     </div>
                     
                     {/* Key Generation */}
@@ -575,15 +605,13 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                       <div className="font-medium">Key Gen (avg)</div>
                       <div className="text-right font-mono">{formatDuration(benchmarkResults.kyber.keyGen.avg)}</div>
                       <div className="text-right font-mono">{formatDuration(benchmarkResults.frodo.keyGen.avg)}</div>
-                      <div className={`text-right font-mono ${benchmarkResults.kyber.keyGen.avg < benchmarkResults.frodo.keyGen.avg ? "text-green-600" : "text-red-600"}`}>
-                        {((benchmarkResults.frodo.keyGen.avg / benchmarkResults.kyber.keyGen.avg - 1) * 100).toFixed(1)}%
-                      </div>
+                      <div className="text-right font-mono">{formatDuration(benchmarkResults.ntru.keyGen.avg)}</div>
                     </div>
                     <div className="grid grid-cols-4 gap-2 px-3 py-1 text-[10px] text-muted-foreground">
                       <div className="pl-2">± std dev</div>
                       <div className="text-right font-mono">±{formatDuration(benchmarkResults.kyber.keyGen.stdDev)}</div>
                       <div className="text-right font-mono">±{formatDuration(benchmarkResults.frodo.keyGen.stdDev)}</div>
-                      <div></div>
+                      <div className="text-right font-mono">±{formatDuration(benchmarkResults.ntru.keyGen.stdDev)}</div>
                     </div>
 
                     {/* Encapsulation */}
@@ -591,15 +619,13 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                       <div className="font-medium">Encap (avg)</div>
                       <div className="text-right font-mono">{formatDuration(benchmarkResults.kyber.encapsulate.avg)}</div>
                       <div className="text-right font-mono">{formatDuration(benchmarkResults.frodo.encapsulate.avg)}</div>
-                      <div className={`text-right font-mono ${benchmarkResults.kyber.encapsulate.avg < benchmarkResults.frodo.encapsulate.avg ? "text-green-600" : "text-red-600"}`}>
-                        {((benchmarkResults.frodo.encapsulate.avg / benchmarkResults.kyber.encapsulate.avg - 1) * 100).toFixed(1)}%
-                      </div>
+                      <div className="text-right font-mono">{formatDuration(benchmarkResults.ntru.encapsulate.avg)}</div>
                     </div>
                     <div className="grid grid-cols-4 gap-2 px-3 py-1 text-[10px] text-muted-foreground">
                       <div className="pl-2">± std dev</div>
                       <div className="text-right font-mono">±{formatDuration(benchmarkResults.kyber.encapsulate.stdDev)}</div>
                       <div className="text-right font-mono">±{formatDuration(benchmarkResults.frodo.encapsulate.stdDev)}</div>
-                      <div></div>
+                      <div className="text-right font-mono">±{formatDuration(benchmarkResults.ntru.encapsulate.stdDev)}</div>
                     </div>
 
                     {/* Decapsulation */}
@@ -607,15 +633,13 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                       <div className="font-medium">Decap (avg)</div>
                       <div className="text-right font-mono">{formatDuration(benchmarkResults.kyber.decapsulate.avg)}</div>
                       <div className="text-right font-mono">{formatDuration(benchmarkResults.frodo.decapsulate.avg)}</div>
-                      <div className={`text-right font-mono ${benchmarkResults.kyber.decapsulate.avg < benchmarkResults.frodo.decapsulate.avg ? "text-green-600" : "text-red-600"}`}>
-                        {((benchmarkResults.frodo.decapsulate.avg / benchmarkResults.kyber.decapsulate.avg - 1) * 100).toFixed(1)}%
-                      </div>
+                      <div className="text-right font-mono">{formatDuration(benchmarkResults.ntru.decapsulate.avg)}</div>
                     </div>
                     <div className="grid grid-cols-4 gap-2 px-3 py-1 text-[10px] text-muted-foreground">
                       <div className="pl-2">± std dev</div>
                       <div className="text-right font-mono">±{formatDuration(benchmarkResults.kyber.decapsulate.stdDev)}</div>
                       <div className="text-right font-mono">±{formatDuration(benchmarkResults.frodo.decapsulate.stdDev)}</div>
-                      <div></div>
+                      <div className="text-right font-mono">±{formatDuration(benchmarkResults.ntru.decapsulate.stdDev)}</div>
                     </div>
 
                     {/* Total */}
@@ -635,13 +659,12 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                           benchmarkResults.frodo.decapsulate.avg
                         )}
                       </div>
-                      <div className={`text-right font-mono font-bold ${
-                        (benchmarkResults.kyber.keyGen.avg + benchmarkResults.kyber.encapsulate.avg + benchmarkResults.kyber.decapsulate.avg) <
-                        (benchmarkResults.frodo.keyGen.avg + benchmarkResults.frodo.encapsulate.avg + benchmarkResults.frodo.decapsulate.avg)
-                          ? "text-green-600" : "text-red-600"
-                      }`}>
-                        {(((benchmarkResults.frodo.keyGen.avg + benchmarkResults.frodo.encapsulate.avg + benchmarkResults.frodo.decapsulate.avg) /
-                          (benchmarkResults.kyber.keyGen.avg + benchmarkResults.kyber.encapsulate.avg + benchmarkResults.kyber.decapsulate.avg) - 1) * 100).toFixed(1)}%
+                      <div className="text-right font-mono font-bold">
+                        {formatDuration(
+                          benchmarkResults.ntru.keyGen.avg +
+                          benchmarkResults.ntru.encapsulate.avg +
+                          benchmarkResults.ntru.decapsulate.avg
+                        )}
                       </div>
                     </div>
                   </div>
@@ -653,30 +676,35 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                     <div className="text-xs font-medium">Key & Ciphertext Sizes</div>
                   </div>
                   <div className="divide-y divide-border">
-                    <div className="grid grid-cols-3 gap-2 px-3 py-2 bg-muted/30 text-[10px] font-medium">
+                    <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-muted/30 text-[10px] font-medium">
                       <div>Parameter</div>
                       <div className="text-right text-indigo-600 dark:text-indigo-400">Kyber</div>
                       <div className="text-right text-orange-600 dark:text-orange-400">Frodo</div>
+                      <div className="text-right text-purple-600 dark:text-purple-400">NTRU</div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 px-3 py-2 text-[10px]">
+                    <div className="grid grid-cols-4 gap-2 px-3 py-2 text-[10px]">
                       <div>Public Key</div>
                       <div className="text-right font-mono">{formatSize(benchmarkResults.kyber.sizes.publicKey)}</div>
                       <div className="text-right font-mono">{formatSize(benchmarkResults.frodo.sizes.publicKey)}</div>
+                      <div className="text-right font-mono">{formatSize(benchmarkResults.ntru.sizes.publicKey)}</div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 px-3 py-2 text-[10px]">
+                    <div className="grid grid-cols-4 gap-2 px-3 py-2 text-[10px]">
                       <div>Secret Key</div>
                       <div className="text-right font-mono">{formatSize(benchmarkResults.kyber.sizes.secretKey)}</div>
                       <div className="text-right font-mono">{formatSize(benchmarkResults.frodo.sizes.secretKey)}</div>
+                      <div className="text-right font-mono">{formatSize(benchmarkResults.ntru.sizes.secretKey)}</div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 px-3 py-2 text-[10px]">
+                    <div className="grid grid-cols-4 gap-2 px-3 py-2 text-[10px]">
                       <div>Ciphertext</div>
                       <div className="text-right font-mono">{formatSize(benchmarkResults.kyber.sizes.ciphertext)}</div>
                       <div className="text-right font-mono">{formatSize(benchmarkResults.frodo.sizes.ciphertext)}</div>
+                      <div className="text-right font-mono">{formatSize(benchmarkResults.ntru.sizes.ciphertext)}</div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 px-3 py-2 text-[10px]">
+                    <div className="grid grid-cols-4 gap-2 px-3 py-2 text-[10px]">
                       <div>Shared Secret</div>
                       <div className="text-right font-mono">{formatSize(benchmarkResults.kyber.sizes.sharedSecret)}</div>
                       <div className="text-right font-mono">{formatSize(benchmarkResults.frodo.sizes.sharedSecret)}</div>
+                      <div className="text-right font-mono">{formatSize(benchmarkResults.ntru.sizes.sharedSecret)}</div>
                     </div>
                   </div>
                 </div>
@@ -686,7 +714,7 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                   <div className="bg-muted/50 px-3 py-2 border-b border-border">
                     <div className="text-xs font-medium">Min/Max Times</div>
                   </div>
-                  <div className="p-3 grid grid-cols-2 gap-3">
+                  <div className="p-3 grid grid-cols-3 gap-3">
                     <div className="space-y-2">
                       <div className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400">Kyber</div>
                       <div className="text-[10px] space-y-1">
@@ -721,6 +749,23 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                         </div>
                       </div>
                     </div>
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-medium text-purple-600 dark:text-purple-400">NTRU</div>
+                      <div className="text-[10px] space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">KeyGen:</span>
+                          <span className="font-mono">{formatDuration(benchmarkResults.ntru.keyGen.min)} - {formatDuration(benchmarkResults.ntru.keyGen.max)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Encap:</span>
+                          <span className="font-mono">{formatDuration(benchmarkResults.ntru.encapsulate.min)} - {formatDuration(benchmarkResults.ntru.encapsulate.max)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Decap:</span>
+                          <span className="font-mono">{formatDuration(benchmarkResults.ntru.decapsulate.min)} - {formatDuration(benchmarkResults.ntru.decapsulate.max)}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </>
@@ -750,9 +795,9 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                   <input
                     type="number"
                     min="10"
-                    max="500"
+                    max="1000"
                     value={iterations}
-                    onChange={(e) => setIterations(Math.max(10, Math.min(500, parseInt(e.target.value) || 50)))}
+                    onChange={(e) => setIterations(Math.max(10, Math.min(1000, parseInt(e.target.value) || 50)))}
                     className="w-20 px-2 py-1 text-xs border border-border rounded bg-background"
                     disabled={isRunningBenchmark}
                   />
@@ -762,9 +807,9 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                   <input
                     type="number"
                     min="1"
-                    max="100"
+                    max="500"
                     value={messagesPerSession}
-                    onChange={(e) => setMessagesPerSession(Math.max(1, Math.min(100, parseInt(e.target.value) || 10)))}
+                    onChange={(e) => setMessagesPerSession(Math.max(1, Math.min(500, parseInt(e.target.value) || 10)))}
                     className="w-20 px-2 py-1 text-xs border border-border rounded bg-background"
                     disabled={isRunningBenchmark}
                   />
@@ -774,9 +819,9 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                   <input
                     type="number"
                     min="1"
-                    max="100"
+                    max="5000"
                     value={messageSizeKB}
-                    onChange={(e) => setMessageSizeKB(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                    onChange={(e) => setMessageSizeKB(Math.max(1, Math.min(5000, parseInt(e.target.value) || 1)))}
                     className="w-20 px-2 py-1 text-xs border border-border rounded bg-background"
                     disabled={isRunningBenchmark}
                   />
@@ -793,18 +838,25 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                   Quick
                 </button>
                 <button
-                  onClick={() => { setIterations(100); setMessagesPerSession(20); setMessageSizeKB(5); }}
+                  onClick={() => { setIterations(100); setMessagesPerSession(20); setMessageSizeKB(10); }}
                   disabled={isRunningBenchmark}
                   className="flex-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-muted"
                 >
                   Normal
                 </button>
                 <button
-                  onClick={() => { setIterations(200); setMessagesPerSession(50); setMessageSizeKB(10); }}
+                  onClick={() => { setIterations(200); setMessagesPerSession(50); setMessageSizeKB(100); }}
                   disabled={isRunningBenchmark}
                   className="flex-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-muted"
                 >
                   Heavy
+                </button>
+                <button
+                  onClick={() => { setIterations(500); setMessagesPerSession(100); setMessageSizeKB(500); }}
+                  disabled={isRunningBenchmark}
+                  className="flex-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-muted bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                >
+                  Extreme
                 </button>
               </div>
               
@@ -848,21 +900,27 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
             {throughputResults && (
               <>
                 {/* Summary Cards */}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-2 text-center">
-                    <div className="text-[10px] text-muted-foreground">Kyber Total</div>
+                    <div className="text-[10px] text-muted-foreground">Kyber</div>
                     <div className="text-sm font-mono font-bold text-indigo-600 dark:text-indigo-400">
                       {formatDuration(throughputResults.kyber.totalSession.avg)}
                     </div>
                   </div>
                   <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 p-2 text-center">
-                    <div className="text-[10px] text-muted-foreground">Frodo Total</div>
+                    <div className="text-[10px] text-muted-foreground">Frodo</div>
                     <div className="text-sm font-mono font-bold text-orange-600 dark:text-orange-400">
                       {formatDuration(throughputResults.frodo.totalSession.avg)}
                     </div>
                   </div>
+                  <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-2 text-center">
+                    <div className="text-[10px] text-muted-foreground">NTRU</div>
+                    <div className="text-sm font-mono font-bold text-purple-600 dark:text-purple-400">
+                      {formatDuration(throughputResults.ntru.totalSession.avg)}
+                    </div>
+                  </div>
                   <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2 text-center">
-                    <div className="text-[10px] text-muted-foreground">ECDH Total</div>
+                    <div className="text-[10px] text-muted-foreground">ECDH</div>
                     <div className="text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400">
                       {formatDuration(throughputResults.ecdh.totalSession.avg)}
                     </div>
@@ -885,10 +943,10 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                         {throughputResults.summary.frodoVsEcdhPercent > 0 ? '+' : ''}{throughputResults.summary.frodoVsEcdhPercent.toFixed(1)}%
                       </span>
                     </div>
-                    <div className="flex justify-between items-center border-t border-border pt-2">
-                      <span className="text-[10px] text-muted-foreground">Frodo vs Kyber:</span>
-                      <span className={`text-xs font-mono font-bold ${throughputResults.summary.kyberVsFrodoPercent > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {throughputResults.summary.kyberVsFrodoPercent > 0 ? '+' : ''}{throughputResults.summary.kyberVsFrodoPercent.toFixed(1)}%
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-muted-foreground">NTRU vs ECDH:</span>
+                      <span className={`text-xs font-mono font-bold ${throughputResults.summary.ntruVsEcdhPercent > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                        {throughputResults.summary.ntruVsEcdhPercent > 0 ? '+' : ''}{throughputResults.summary.ntruVsEcdhPercent.toFixed(1)}%
                       </span>
                     </div>
                   </div>
@@ -903,34 +961,39 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                     </div>
                   </div>
                   <div className="divide-y divide-border">
-                    <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-muted/30 text-[10px] font-medium">
+                    <div className="grid grid-cols-5 gap-2 px-3 py-2 bg-muted/30 text-[10px] font-medium">
                       <div>Metric</div>
                       <div className="text-right text-indigo-600 dark:text-indigo-400">Kyber</div>
                       <div className="text-right text-orange-600 dark:text-orange-400">Frodo</div>
+                      <div className="text-right text-purple-600 dark:text-purple-400">NTRU</div>
                       <div className="text-right text-emerald-600 dark:text-emerald-400">ECDH</div>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 px-3 py-2 text-[10px]">
+                    <div className="grid grid-cols-5 gap-2 px-3 py-2 text-[10px]">
                       <div className="font-medium">Key Exchange</div>
                       <div className="text-right font-mono">{formatDuration(throughputResults.kyber.keyExchange.avg)}</div>
                       <div className="text-right font-mono">{formatDuration(throughputResults.frodo.keyExchange.avg)}</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.ntru.keyExchange.avg)}</div>
                       <div className="text-right font-mono">{formatDuration(throughputResults.ecdh.keyExchange.avg)}</div>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 px-3 py-2 text-[10px]">
+                    <div className="grid grid-cols-5 gap-2 px-3 py-2 text-[10px]">
                       <div className="font-medium">Encrypt (per msg)</div>
                       <div className="text-right font-mono">{formatDuration(throughputResults.kyber.messageEncrypt.avg)}</div>
                       <div className="text-right font-mono">{formatDuration(throughputResults.frodo.messageEncrypt.avg)}</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.ntru.messageEncrypt.avg)}</div>
                       <div className="text-right font-mono">{formatDuration(throughputResults.ecdh.messageEncrypt.avg)}</div>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 px-3 py-2 text-[10px]">
+                    <div className="grid grid-cols-5 gap-2 px-3 py-2 text-[10px]">
                       <div className="font-medium">Decrypt (per msg)</div>
                       <div className="text-right font-mono">{formatDuration(throughputResults.kyber.messageDecrypt.avg)}</div>
                       <div className="text-right font-mono">{formatDuration(throughputResults.frodo.messageDecrypt.avg)}</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.ntru.messageDecrypt.avg)}</div>
                       <div className="text-right font-mono">{formatDuration(throughputResults.ecdh.messageDecrypt.avg)}</div>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 px-3 py-2 text-[10px] bg-muted/30 font-bold">
+                    <div className="grid grid-cols-5 gap-2 px-3 py-2 text-[10px] bg-muted/30 font-bold">
                       <div>Total Session</div>
                       <div className="text-right font-mono">{formatDuration(throughputResults.kyber.totalSession.avg)}</div>
                       <div className="text-right font-mono">{formatDuration(throughputResults.frodo.totalSession.avg)}</div>
+                      <div className="text-right font-mono">{formatDuration(throughputResults.ntru.totalSession.avg)}</div>
                       <div className="text-right font-mono">{formatDuration(throughputResults.ecdh.totalSession.avg)}</div>
                     </div>
                   </div>
@@ -946,11 +1009,10 @@ export default function BenchmarkPanel({ isOpen, onClose }: Props) {
                     Compared to traditional ECDH (P-256):
                     <br/>• Kyber adds <strong>{throughputResults.summary.kyberVsEcdhPercent > 0 ? '+' : ''}{throughputResults.summary.kyberVsEcdhPercent.toFixed(1)}%</strong> overhead
                     <br/>• Frodo adds <strong>{throughputResults.summary.frodoVsEcdhPercent > 0 ? '+' : ''}{throughputResults.summary.frodoVsEcdhPercent.toFixed(1)}%</strong> overhead
+                    <br/>• NTRU adds <strong>{throughputResults.summary.ntruVsEcdhPercent > 0 ? '+' : ''}{throughputResults.summary.ntruVsEcdhPercent.toFixed(1)}%</strong> overhead
                     <br/><br/>
-                    <strong>Conclusion:</strong> {throughputResults.summary.kyberVsFrodoPercent > 0 
-                      ? `Kyber is ${Math.abs(throughputResults.summary.kyberVsFrodoPercent).toFixed(1)}% faster than Frodo.`
-                      : `Frodo is ${Math.abs(throughputResults.summary.kyberVsFrodoPercent).toFixed(1)}% faster than Kyber.`}
-                    {' '}Both PQC algorithms provide quantum resistance at the cost of {Math.min(Math.abs(throughputResults.summary.kyberVsEcdhPercent), Math.abs(throughputResults.summary.frodoVsEcdhPercent)).toFixed(0)}-{Math.max(Math.abs(throughputResults.summary.kyberVsEcdhPercent), Math.abs(throughputResults.summary.frodoVsEcdhPercent)).toFixed(0)}% performance overhead vs traditional ECDH.
+                    <strong>Conclusion:</strong> All three PQC algorithms provide quantum resistance.
+                    {' '}The overhead ranges from {Math.min(Math.abs(throughputResults.summary.kyberVsEcdhPercent), Math.abs(throughputResults.summary.frodoVsEcdhPercent), Math.abs(throughputResults.summary.ntruVsEcdhPercent)).toFixed(0)}% to {Math.max(Math.abs(throughputResults.summary.kyberVsEcdhPercent), Math.abs(throughputResults.summary.frodoVsEcdhPercent), Math.abs(throughputResults.summary.ntruVsEcdhPercent)).toFixed(0)}% vs traditional ECDH.
                   </p>
                 </div>
               </>
