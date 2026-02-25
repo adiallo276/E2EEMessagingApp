@@ -44,8 +44,7 @@ export default function HomePage() {
           </h1>
 
           <p className="mt-4 text-muted-foreground leading-relaxed max-w-xl">
-            Start with standard messaging, then you can enable end-to-end encryption per
-            conversation.
+            Start a conversation and choose from four encryption options: Mini-Kyber, Mini-Frodo, Mini-NTRU (post-quantum) and Classic (ECDH).
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3">
@@ -63,19 +62,19 @@ export default function HomePage() {
             <div className="rounded-xl border border-border bg-card p-4">
               <div className="font-medium">Four encryption options</div>
               <div className="text-muted-foreground mt-1">
-                Kyber, Frodo, NTRU (PQC) + Classic
+                Mini-Kyber, Mini-Frodo, Mini-NTRU (PQC) + Classic (ECDH)
               </div>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
-              <div className="font-medium">WebSockets</div>
+              <div className="font-medium">Benchmark</div>
               <div className="text-muted-foreground mt-1">
-                Realtime messaging
+                Compare the algorithms to classical encryption
               </div>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
-              <div className="font-medium">E2EE Toggle</div>
+              <div className="font-medium">E2EE + ChatGPT API</div>
               <div className="text-muted-foreground mt-1">
-                Per conversation
+                Conversations are end-to-end encrypted and can be used with ChatGPT
               </div>
             </div>
           </div>
@@ -112,7 +111,7 @@ export default function HomePage() {
                   you • now
                 </div>
                 <div className="mt-1 rounded-2xl bg-primary text-primary-foreground px-3 py-2 text-sm">
-                  Sure. Let’s also make it end-to-end encrypted!
+                  Sure. Let’s also benchmark it against ECDH!
                 </div>
               </div>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ui/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,43 @@ export default function ConversationsPage() {
   const [newUser, setNewUser] = useState("");
   const [creating, setCreating] = useState(false);
   const [selectedAlg, setSelectedAlg] = useState<"kyber" | "frodo" | "ntru" | "ecdh">("kyber");
+
+  const [searchResults, setSearchResults] = useState<{ id: number; username: string }[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  function handleSearchInput(value: string) {
+    setNewUser(value);
+    setShowDropdown(true);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (value.trim().length === 0) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const results = await api(`/users/search?q=${encodeURIComponent(value.trim())}`);
+        setSearchResults(results);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+  }
+
+  function selectUser(uname: string) {
+    setNewUser(uname);
+    setShowDropdown(false);
+    setSearchResults([]);
+  }
 
   function formatLastMessage(msg: any, myUsername: string): string {
     if (!msg || !msg.content) return "";
@@ -202,9 +239,9 @@ export default function ConversationsPage() {
             <span className="text-sm font-bold">Q</span>
           </div>
           <div>
-            <div className="font-semibold tracking-tight leading-tight">Q-Messaging</div>
+            <div className="font-semibold tracking-tight leading-tight">Post-Quantum Messaging Service</div>
             <div className="text-xs text-muted-foreground">
-              {username ? `Signed in as ${username}` : "Secure chat • Optional E2EE • PQC-ready"}
+              {username ? `Signed in as ${username}` : "Secure chat • E2EE • PQC-ready"}
             </div>
           </div>
         </div>
@@ -245,10 +282,10 @@ export default function ConversationsPage() {
             </div>
             <div className="flex-1">
               <div className="font-semibold flex items-center gap-2">
-                ChatGPT Bot
+                ChatGPT API
                 <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-600">Testing</span>
               </div>
-              <div className="text-sm text-muted-foreground">Test end-to-end encryption without a second account. Supports images!</div>
+              <div className="text-sm text-muted-foreground">Start a chat with ChatGPT!</div>
             </div>
             <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -325,22 +362,56 @@ export default function ConversationsPage() {
             <div className="p-4 border-b border-border">
               <div className="font-medium">Start a new conversation</div>
               <div className="text-xs text-muted-foreground">
-                Enter the other user's exact username (must already be registered)
+                Search for a user by username
               </div>
             </div>
 
             <div className="p-4 space-y-4">
               <div>
                 <label className="text-xs text-muted-foreground mb-1.5 block">Username</label>
-                <input
-                  className="w-full rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="e.g. admin"
-                  value={newUser}
-                  onChange={(e) => setNewUser(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && newUser.trim()) createConversation();
-                  }}
-                />
+                <div className="relative">
+                  <input
+                    className="w-full rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="Search for a user..."
+                    value={newUser}
+                    onChange={(e) => handleSearchInput(e.target.value)}
+                    onFocus={() => { if (searchResults.length > 0) setShowDropdown(true); }}
+                    onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newUser.trim()) createConversation();
+                    }}
+                  />
+
+                  {showDropdown && newUser.trim().length > 0 && (
+                    <div className="absolute z-50 mt-1 w-full rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+                      {searching ? (
+                        <div className="px-3 py-3 text-sm text-muted-foreground text-center">
+                          Searching...
+                        </div>
+                      ) : searchResults.length > 0 ? (
+                        searchResults.map((user) => (
+                          <button
+                            key={user.id}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => selectUser(user.username)}
+                            className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50 transition flex items-center gap-2 border-b border-border last:border-0"
+                          >
+                            <div className="h-7 w-7 rounded-full bg-primary/10 border border-border grid place-items-center">
+                              <span className="text-xs font-medium">
+                                {user.username.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <span>{user.username}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-3 text-sm text-muted-foreground text-center">
+                          No users found
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div>
@@ -374,7 +445,7 @@ export default function ConversationsPage() {
               </Button>
 
               <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                <div className="font-medium mb-1">💡 About the algorithms:</div>
+                <div className="font-medium mb-1">About the algorithms:</div>
                 <ul className="space-y-1 text-[11px]">
                   <li><span className="text-indigo-600 dark:text-indigo-400 font-medium">Kyber</span> — Post-quantum (Ring-LWE), fastest PQC option</li>
                   <li><span className="text-orange-600 dark:text-orange-400 font-medium">Frodo</span> — Post-quantum (LWE), more conservative security</li>
@@ -388,7 +459,7 @@ export default function ConversationsPage() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-xs text-muted-foreground">
-          Designed by Abdoulahi Diallo for Final Year Project
+          Created by Abdoulahi Diallo for Final Year Project
         </div>
       </div>
     </main>

@@ -439,4 +439,92 @@ public class AdditionalEndpointTests {
         assertNull(saved.getContent());
         assertNotNull(saved.getTimestamp());
     }
+
+    // ==================== USER SEARCH TESTS ====================
+
+    @Test
+    @Order(80)
+    @DisplayName("GET /users/search should return matching users")
+    void testSearchUsersPartialMatch() throws Exception {
+        mockMvc.perform(get("/users/search")
+                        .param("q", "extra")
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(2))))
+                .andExpect(jsonPath("$[0].username").exists())
+                .andExpect(jsonPath("$[0].id").exists());
+    }
+
+    @Test
+    @Order(81)
+    @DisplayName("GET /users/search should exclude the authenticated user")
+    void testSearchExcludesSelf() throws Exception {
+        MvcResult result = mockMvc.perform(get("/users/search")
+                        .param("q", "extra_user1")
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String json = result.getResponse().getContentAsString();
+        assertFalse(json.contains("extra_user1"), "Search should exclude the authenticated user");
+    }
+
+    @Test
+    @Order(82)
+    @DisplayName("GET /users/search should be case-insensitive")
+    void testSearchCaseInsensitive() throws Exception {
+        mockMvc.perform(get("/users/search")
+                        .param("q", "EXTRA")
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(2))));
+    }
+
+    @Test
+    @Order(83)
+    @DisplayName("GET /users/search should return empty for no match")
+    void testSearchNoMatch() throws Exception {
+        mockMvc.perform(get("/users/search")
+                        .param("q", "zzz_nonexistent_zzz")
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    @Order(84)
+    @DisplayName("GET /users/search should return empty for blank query")
+    void testSearchBlankQuery() throws Exception {
+        mockMvc.perform(get("/users/search")
+                        .param("q", "")
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    @Order(85)
+    @DisplayName("GET /users/search should not return password or key fields")
+    void testSearchDoesNotLeakSensitiveData() throws Exception {
+        MvcResult result = mockMvc.perform(get("/users/search")
+                        .param("q", "extra")
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String json = result.getResponse().getContentAsString();
+        assertFalse(json.contains("password"), "Search results should not contain password");
+        assertFalse(json.contains("kyberPublic"), "Search results should not contain kyber keys");
+        assertFalse(json.contains("frodoPublic"), "Search results should not contain frodo keys");
+    }
+
+    @Test
+    @Order(86)
+    @DisplayName("GET /users/search should reject unauthenticated request")
+    void testSearchUnauthenticated() throws Exception {
+        mockMvc.perform(get("/users/search")
+                        .param("q", "extra"))
+                .andExpect(status().isUnauthorized());
+    }
 }
