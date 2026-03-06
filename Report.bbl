@@ -1,0 +1,300 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated as
+% required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+\datalist[entry]{nty/global//global/global/global}
+  \entry{bernstein2017}{misc}{}{}
+    \name{author}{2}{}{%
+      {{hash=BDJ}{%
+         family={Bernstein},
+         familyi={B\bibinitperiod},
+         given={Daniel\bibnamedelima J.},
+         giveni={D\bibinitperiod\bibinitdelim J\bibinitperiod},
+      }}%
+      {{hash=LT}{%
+         family={Lange},
+         familyi={L\bibinitperiod},
+         given={Tanja},
+         giveni={T\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{BDJLT1}
+    \strng{fullhash}{BDJLT1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{B}
+    \field{sortinithash}{B}
+    \verb{doi}
+    \verb 10.1038/nature23461
+    \endverb
+    \field{howpublished}{Nature}
+    \field{pages}{188\bibrangedash 194}
+    \field{title}{Post-quantum cryptography}
+    \field{volume}{549}
+    \field{year}{2017}
+  \endentry
+
+  \entry{bos2018}{inproceedings}{}{}
+    \name{author}{9}{}{%
+      {{hash=BJW}{%
+         family={Bos},
+         familyi={B\bibinitperiod},
+         given={Joppe\bibnamedelima W.},
+         giveni={J\bibinitperiod\bibinitdelim W\bibinitperiod},
+      }}%
+      {{hash=DL}{%
+         family={Ducas},
+         familyi={D\bibinitperiod},
+         given={Léo},
+         giveni={L\bibinitperiod},
+      }}%
+      {{hash=KE}{%
+         family={Kiltz},
+         familyi={K\bibinitperiod},
+         given={Eike},
+         giveni={E\bibinitperiod},
+      }}%
+      {{hash=LT}{%
+         family={Lepoint},
+         familyi={L\bibinitperiod},
+         given={Tancrède},
+         giveni={T\bibinitperiod},
+      }}%
+      {{hash=LV}{%
+         family={Lyubashevsky},
+         familyi={L\bibinitperiod},
+         given={Vadim},
+         giveni={V\bibinitperiod},
+      }}%
+      {{hash=SJM}{%
+         family={Schanck},
+         familyi={S\bibinitperiod},
+         given={John\bibnamedelima M.},
+         giveni={J\bibinitperiod\bibinitdelim M\bibinitperiod},
+      }}%
+      {{hash=SP}{%
+         family={Schwabe},
+         familyi={S\bibinitperiod},
+         given={Peter},
+         giveni={P\bibinitperiod},
+      }}%
+      {{hash=SG}{%
+         family={Seiler},
+         familyi={S\bibinitperiod},
+         given={Gregor},
+         giveni={G\bibinitperiod},
+      }}%
+      {{hash=SD}{%
+         family={Stehlé},
+         familyi={S\bibinitperiod},
+         given={Damien},
+         giveni={D\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{BJW+1}
+    \strng{fullhash}{BJWDLKELTLVSJMSPSGSD1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{B}
+    \field{sortinithash}{B}
+    \field{booktitle}{2018 IEEE European Symposium on Security and Privacy}
+    \verb{doi}
+    \verb 10.1109/EuroSP.2018.00032
+    \endverb
+    \field{pages}{353\bibrangedash 367}
+    \field{title}{{CRYSTALS-Kyber}: A {CCA}-Secure Module-Lattice-Based {KEM}}
+    \field{year}{2018}
+  \endentry
+
+  \entry{hoffstein1998}{inproceedings}{}{}
+    \name{author}{3}{}{%
+      {{hash=HJ}{%
+         family={Hoffstein},
+         familyi={H\bibinitperiod},
+         given={Jeffrey},
+         giveni={J\bibinitperiod},
+      }}%
+      {{hash=PJ}{%
+         family={Pipher},
+         familyi={P\bibinitperiod},
+         given={Jill},
+         giveni={J\bibinitperiod},
+      }}%
+      {{hash=SJH}{%
+         family={Silverman},
+         familyi={S\bibinitperiod},
+         given={Joseph\bibnamedelima H.},
+         giveni={J\bibinitperiod\bibinitdelim H\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {Springer}%
+    }
+    \strng{namehash}{HJPJSJH1}
+    \strng{fullhash}{HJPJSJH1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{H}
+    \field{sortinithash}{H}
+    \field{booktitle}{Algorithmic Number Theory}
+    \verb{doi}
+    \verb 10.1007/BFb0054868
+    \endverb
+    \field{pages}{267\bibrangedash 288}
+    \field{title}{{NTRU}: A Ring-Based Public Key Cryptosystem}
+    \field{year}{1998}
+  \endentry
+
+  \entry{lyubashevsky2010}{inproceedings}{}{}
+    \name{author}{3}{}{%
+      {{hash=LV}{%
+         family={Lyubashevsky},
+         familyi={L\bibinitperiod},
+         given={Vadim},
+         giveni={V\bibinitperiod},
+      }}%
+      {{hash=PC}{%
+         family={Peikert},
+         familyi={P\bibinitperiod},
+         given={Chris},
+         giveni={C\bibinitperiod},
+      }}%
+      {{hash=RO}{%
+         family={Regev},
+         familyi={R\bibinitperiod},
+         given={Oded},
+         giveni={O\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {Springer}%
+    }
+    \strng{namehash}{LVPCRO1}
+    \strng{fullhash}{LVPCRO1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{L}
+    \field{sortinithash}{L}
+    \field{booktitle}{Advances in Cryptology -- EUROCRYPT 2010}
+    \verb{doi}
+    \verb 10.1007/978-3-642-13190-5_1
+    \endverb
+    \field{pages}{1\bibrangedash 23}
+    \field{title}{On Ideal Lattices and Learning with Errors over Rings}
+    \field{year}{2010}
+  \endentry
+
+  \entry{nist2024}{misc}{}{}
+    \name{author}{1}{}{%
+      {{hash=N}{%
+         family={{National Institute of Standards and Technology}},
+         familyi={N\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{N1}
+    \strng{fullhash}{N1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{N}
+    \field{sortinithash}{N}
+    \field{howpublished}{FIPS 203}
+    \field{title}{Module-Lattice-Based Key-Encapsulation Mechanism Standard}
+    \verb{url}
+    \verb https://csrc.nist.gov/pubs/fips/203/final
+    \endverb
+    \field{year}{2024}
+  \endentry
+
+  \entry{regev2005}{article}{}{}
+    \name{author}{1}{}{%
+      {{hash=RO}{%
+         family={Regev},
+         familyi={R\bibinitperiod},
+         given={Oded},
+         giveni={O\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{RO1}
+    \strng{fullhash}{RO1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{R}
+    \field{sortinithash}{R}
+    \verb{doi}
+    \verb 10.1145/1568318.1568324
+    \endverb
+    \field{note}{Preliminary version in STOC 2005}
+    \field{number}{6}
+    \field{pages}{1\bibrangedash 40}
+    \field{title}{On Lattices, Learning with Errors, Random Linear Codes, and
+  Cryptography}
+    \field{volume}{56}
+    \field{journaltitle}{Journal of the ACM}
+    \field{year}{2009}
+  \endentry
+
+  \entry{shor1994}{article}{}{}
+    \name{author}{1}{}{%
+      {{hash=SPW}{%
+         family={Shor},
+         familyi={S\bibinitperiod},
+         given={Peter\bibnamedelima W.},
+         giveni={P\bibinitperiod\bibinitdelim W\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {IEEE Computer Society}%
+    }
+    \strng{namehash}{SPW1}
+    \strng{fullhash}{SPW1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{S}
+    \field{sortinithash}{S}
+    \field{booktitle}{Proceedings of the 35th Annual Symposium on Foundations
+  of Computer Science}
+    \verb{doi}
+    \verb 10.1109/SFCS.1994.365700
+    \endverb
+    \field{pages}{124\bibrangedash 134}
+    \field{title}{Algorithms for Quantum Computation: Discrete Logarithms and
+  Factoring}
+    \field{year}{1994}
+  \endentry
+
+  \entry{signal2023}{misc}{}{}
+    \name{author}{1}{}{%
+      {{hash=S}{%
+         family={Signal},
+         familyi={S\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{S1}
+    \strng{fullhash}{S1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{S}
+    \field{sortinithash}{S}
+    \field{howpublished}{Signal Technical Documentation}
+    \field{title}{{PQXDH} Key Agreement Protocol}
+    \verb{url}
+    \verb https://signal.org/docs/specifications/pqxdh/
+    \endverb
+    \field{year}{2023}
+  \endentry
+\enddatalist
+\endinput

@@ -5,9 +5,13 @@ export function b64(bytes: Uint8Array) {
 }
 
 export function toArrayBuffer(u8: Uint8Array): ArrayBuffer {
-  const ab = new ArrayBuffer(u8.byteLength);
-  new Uint8Array(ab).set(u8);
-  return ab;
+  // If the Uint8Array already has its own buffer with no offset and same length,
+  // we can use it directly to avoid creating a copy
+  if (u8.byteOffset === 0 && u8.byteLength === u8.buffer.byteLength) {
+    return u8.buffer;
+  }
+  // Otherwise create a copy
+  return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
 }
 
 export function unb64(s: string) {

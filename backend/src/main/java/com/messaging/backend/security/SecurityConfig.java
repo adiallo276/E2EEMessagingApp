@@ -40,6 +40,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/auth/**", "/ws/**", "/ws").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/users/*/profile-picture").permitAll()
                         .anyRequest().authenticated()
                 );
 

@@ -32,7 +32,8 @@ public class UserSearchController {
                 .limit(10)
                 .map(u -> Map.<String, Object>of(
                         "id", u.getId(),
-                        "username", u.getUsername()
+                        "username", u.getUsername(),
+                        "hasProfilePicture", u.getProfilePicture() != null
                 ))
                 .toList();
     }

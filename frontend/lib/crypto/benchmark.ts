@@ -461,12 +461,14 @@ export async function benchmarkedEncryptChatMessage(
   plaintext: string
 ): Promise<{ ciphertext: string; benchmarks: { aesEncryptMs: number; keyDeriveMs: number } }> {
   const isImage = plaintext.startsWith("IMG:");
+  const isVoice = plaintext.startsWith("VOICE:");
+  const contentType = isVoice ? "voice" : isImage ? "image" : "text";
   const inputBytes = new TextEncoder().encode(plaintext).length;
-  
+
   const keyDeriveStart = performance.now();
   const raw = localStorage.getItem(sessionStorageKey(conversationId));
   if (!raw) throw new Error("E2EE not ready yet (no session key)");
-  
+
   const obj = JSON.parse(raw) as { alg: KemAlg; sharedSecretB64: string; saltB64: string; infoB64: string };
   const shared = unb64(obj.sharedSecretB64);
   const salt = unb64(obj.saltB64);
@@ -481,15 +483,16 @@ export async function benchmarkedEncryptChatMessage(
   const env: E2eeMsg = { type: "E2EE_MSG", v: 1, ivB64, ciphertextB64 };
   const ciphertext = jsonToContent(env);
 
+  const opLabel = isVoice ? "Voice" : isImage ? "Image" : "Text";
   addBenchmarkEvent({
     type: "aes_encrypt",
     algorithm: "AES-GCM",
-    operation: isImage ? "AES-GCM Image Encryption" : "AES-GCM Text Encryption",
+    operation: `AES-GCM ${opLabel} Encryption`,
     durationMs: aesEncryptMs,
     inputSize: inputBytes,
     outputSize: ciphertext.length,
     details: {
-      contentType: isImage ? "image" : "text",
+      contentType,
       plaintextBytes: inputBytes,
       ciphertextBytes: ciphertextB64.length,
       ivLength: ivB64.length,
@@ -526,17 +529,20 @@ export async function benchmarkedDecryptChatMessage(
   const aesDecryptMs = performance.now() - aesStart;
 
   const isImage = plaintext.startsWith("IMG:");
+  const isVoice = plaintext.startsWith("VOICE:");
+  const contentType = isVoice ? "voice" : isImage ? "image" : "text";
   const outputBytes = new TextEncoder().encode(plaintext).length;
 
+  const opLabel = isVoice ? "Voice" : isImage ? "Image" : "Text";
   addBenchmarkEvent({
     type: "aes_decrypt",
     algorithm: "AES-GCM",
-    operation: isImage ? "AES-GCM Image Decryption" : "AES-GCM Text Decryption",
+    operation: `AES-GCM ${opLabel} Decryption`,
     durationMs: aesDecryptMs,
     inputSize: msg.ciphertextB64.length,
     outputSize: outputBytes,
     details: {
-      contentType: isImage ? "image" : "text",
+      contentType,
       ciphertextBytes: msg.ciphertextB64.length,
       plaintextBytes: outputBytes,
       keyDeriveMs,
@@ -897,8 +903,12 @@ export async function runThroughputBenchmark(
   messageSizeKB: number = 1,
   onProgress?: (progress: BenchmarkProgress) => void
 ): Promise<ThroughputResults> {
-  const messageSize = messageSizeKB * 1024;
-  const testMessage = "A".repeat(messageSize);
+  // Use parameters directly - support extreme mode
+  const safeIterations = iterations;
+  const safeMessagesPerSession = messagesPerSession;
+  const messageSize = Math.floor(messageSizeKB * 1024);
+  // Create the test message once and reuse it
+  const testMessage = "A".repeat(Math.max(messageSize, 100));
   
   const kyberKeyExchangeTimes: number[] = [];
   const kyberEncryptTimes: number[] = [];
@@ -944,11 +954,11 @@ export async function runThroughputBenchmark(
   
   await new Promise(resolve => setTimeout(resolve, 100));
   
-  const totalOps = iterations * 4; // Kyber, Frodo, NTRU, ECDH
+  const totalOps = safeIterations * 4; // Kyber, Frodo, NTRU, ECDH
   let completedOps = 0;
   
   // Benchmark Kyber sessions
-  for (let i = 0; i < iterations; i++) {
+  for (let i = 0; i < safeIterations; i++) {
     onProgress?.({ phase: "Benchmarking Kyber sessions", current: completedOps, total: totalOps });
     
     const sessionStart = performance.now();
@@ -966,7 +976,7 @@ export async function runThroughputBenchmark(
     
     let encryptTotal = 0;
     let decryptTotal = 0;
-    for (let m = 0; m < messagesPerSession; m++) {
+    for (let m = 0; m < safeMessagesPerSession; m++) {
       const encStart = performance.now();
       const encrypted = await aesGcmEncrypt(testMessage, aesKey);
       encryptTotal += performance.now() - encStart;
@@ -975,20 +985,22 @@ export async function runThroughputBenchmark(
       await aesGcmDecrypt(encrypted.ivB64, encrypted.ciphertextB64, aesKey);
       decryptTotal += performance.now() - decStart;
     }
-    kyberEncryptTimes.push(encryptTotal / messagesPerSession);
-    kyberDecryptTimes.push(decryptTotal / messagesPerSession);
+    kyberEncryptTimes.push(encryptTotal / safeMessagesPerSession);
+    kyberDecryptTimes.push(decryptTotal / safeMessagesPerSession);
     
     const sessionEnd = performance.now();
     kyberTotalTimes.push(sessionEnd - sessionStart);
     
     completedOps++;
-    if (i % 5 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+    // Yield to event loop frequently to allow garbage collection
+    if (i % 2 === 0) await new Promise(resolve => setTimeout(resolve, 5));
   }
   
-  await new Promise(resolve => setTimeout(resolve, 100));
+  // Longer pause between algorithms to allow garbage collection
+  await new Promise(resolve => setTimeout(resolve, 300));
   
   // Benchmark Frodo sessions
-  for (let i = 0; i < iterations; i++) {
+  for (let i = 0; i < safeIterations; i++) {
     onProgress?.({ phase: "Benchmarking Frodo sessions", current: completedOps, total: totalOps });
     
     const sessionStart = performance.now();
@@ -1006,7 +1018,7 @@ export async function runThroughputBenchmark(
     
     let encryptTotal = 0;
     let decryptTotal = 0;
-    for (let m = 0; m < messagesPerSession; m++) {
+    for (let m = 0; m < safeMessagesPerSession; m++) {
       const encStart = performance.now();
       const encrypted = await aesGcmEncrypt(testMessage, aesKey);
       encryptTotal += performance.now() - encStart;
@@ -1015,20 +1027,20 @@ export async function runThroughputBenchmark(
       await aesGcmDecrypt(encrypted.ivB64, encrypted.ciphertextB64, aesKey);
       decryptTotal += performance.now() - decStart;
     }
-    frodoEncryptTimes.push(encryptTotal / messagesPerSession);
-    frodoDecryptTimes.push(decryptTotal / messagesPerSession);
+    frodoEncryptTimes.push(encryptTotal / safeMessagesPerSession);
+    frodoDecryptTimes.push(decryptTotal / safeMessagesPerSession);
     
     const sessionEnd = performance.now();
     frodoTotalTimes.push(sessionEnd - sessionStart);
     
     completedOps++;
-    if (i % 5 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+    if (i % 2 === 0) await new Promise(resolve => setTimeout(resolve, 5));
   }
   
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await new Promise(resolve => setTimeout(resolve, 300));
   
   // Benchmark NTRU sessions
-  for (let i = 0; i < iterations; i++) {
+  for (let i = 0; i < safeIterations; i++) {
     onProgress?.({ phase: "Benchmarking NTRU sessions", current: completedOps, total: totalOps });
     
     const sessionStart = performance.now();
@@ -1046,7 +1058,7 @@ export async function runThroughputBenchmark(
     
     let encryptTotal = 0;
     let decryptTotal = 0;
-    for (let m = 0; m < messagesPerSession; m++) {
+    for (let m = 0; m < safeMessagesPerSession; m++) {
       const encStart = performance.now();
       const encrypted = await aesGcmEncrypt(testMessage, aesKey);
       encryptTotal += performance.now() - encStart;
@@ -1055,20 +1067,20 @@ export async function runThroughputBenchmark(
       await aesGcmDecrypt(encrypted.ivB64, encrypted.ciphertextB64, aesKey);
       decryptTotal += performance.now() - decStart;
     }
-    ntruEncryptTimes.push(encryptTotal / messagesPerSession);
-    ntruDecryptTimes.push(decryptTotal / messagesPerSession);
+    ntruEncryptTimes.push(encryptTotal / safeMessagesPerSession);
+    ntruDecryptTimes.push(decryptTotal / safeMessagesPerSession);
     
     const sessionEnd = performance.now();
     ntruTotalTimes.push(sessionEnd - sessionStart);
     
     completedOps++;
-    if (i % 5 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+    if (i % 2 === 0) await new Promise(resolve => setTimeout(resolve, 5));
   }
   
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await new Promise(resolve => setTimeout(resolve, 300));
   
   // Benchmark ECDH sessions
-  for (let i = 0; i < iterations; i++) {
+  for (let i = 0; i < safeIterations; i++) {
     onProgress?.({ phase: "Benchmarking ECDH sessions", current: completedOps, total: totalOps });
     
     const sessionStart = performance.now();
@@ -1084,7 +1096,7 @@ export async function runThroughputBenchmark(
     
     let encryptTotal = 0;
     let decryptTotal = 0;
-    for (let m = 0; m < messagesPerSession; m++) {
+    for (let m = 0; m < safeMessagesPerSession; m++) {
       const encStart = performance.now();
       const encrypted = await aesGcmEncrypt(testMessage, aesKey);
       encryptTotal += performance.now() - encStart;
@@ -1093,16 +1105,17 @@ export async function runThroughputBenchmark(
       await aesGcmDecrypt(encrypted.ivB64, encrypted.ciphertextB64, aesKey);
       decryptTotal += performance.now() - decStart;
     }
-    ecdhEncryptTimes.push(encryptTotal / messagesPerSession);
-    ecdhDecryptTimes.push(decryptTotal / messagesPerSession);
+    ecdhEncryptTimes.push(encryptTotal / safeMessagesPerSession);
+    ecdhDecryptTimes.push(decryptTotal / safeMessagesPerSession);
     
     const sessionEnd = performance.now();
     ecdhTotalTimes.push(sessionEnd - sessionStart);
     
     completedOps++;
-    if (i % 5 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+    if (i % 2 === 0) await new Promise(resolve => setTimeout(resolve, 5));
   }
   
+  await new Promise(resolve => setTimeout(resolve, 200));
   onProgress?.({ phase: "Complete", current: totalOps, total: totalOps });
   
   const kyberKeyExchange = calculateStats(kyberKeyExchangeTimes);

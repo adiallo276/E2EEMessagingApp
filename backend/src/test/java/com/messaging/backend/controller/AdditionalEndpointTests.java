@@ -16,6 +16,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import org.springframework.mock.web.MockMultipartFile;
+
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -526,5 +528,151 @@ public class AdditionalEndpointTests {
         mockMvc.perform(get("/users/search")
                         .param("q", "extra"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ==================== PROFILE PICTURE TESTS ====================
+
+    @Test
+    @Order(90)
+    @DisplayName("POST /users/me/profile-picture should upload a valid image")
+    void testUploadProfilePicture() throws Exception {
+        // Create a tiny 1x1 red PNG (valid image file)
+        byte[] pngBytes = createTinyPng();
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "avatar.png", "image/png", pngBytes
+        );
+
+        mockMvc.perform(multipart("/users/me/profile-picture")
+                        .file(file)
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Profile picture updated")));
+
+        // Verify user now has a profile picture
+        User user = userRepository.findByUsername("extra_user1").orElseThrow();
+        assertNotNull(user.getProfilePicture());
+        assertTrue(user.getProfilePicture().startsWith("data:image/png;base64,"));
+        assertTrue(user.getHasProfilePicture());
+    }
+
+    @Test
+    @Order(91)
+    @DisplayName("GET /users/{username}/profile-picture should serve uploaded image")
+    void testGetProfilePicture() throws Exception {
+        mockMvc.perform(get("/users/extra_user1/profile-picture"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "image/png"));
+    }
+
+    @Test
+    @Order(92)
+    @DisplayName("GET /users/{username}/profile-picture should be accessible without auth (public)")
+    void testGetProfilePicturePublic() throws Exception {
+        // No Authorization header — should still work because the GET endpoint is public
+        mockMvc.perform(get("/users/extra_user1/profile-picture"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @Order(93)
+    @DisplayName("GET /users/{username}/profile-picture should 404 for user without picture")
+    void testGetProfilePictureNotFound() throws Exception {
+        // extra_user2 hasn't uploaded a picture
+        mockMvc.perform(get("/users/extra_user2/profile-picture"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Order(94)
+    @DisplayName("GET /users/{username}/profile-picture should 404 for non-existent user")
+    void testGetProfilePictureNonExistentUser() throws Exception {
+        mockMvc.perform(get("/users/non_existent_user_xyz/profile-picture"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Order(95)
+    @DisplayName("POST /users/me/profile-picture should reject non-image file")
+    void testUploadNonImageRejected() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "document.txt", "text/plain", "not an image".getBytes()
+        );
+
+        mockMvc.perform(multipart("/users/me/profile-picture")
+                        .file(file)
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(containsString("must be an image")));
+    }
+
+    @Test
+    @Order(96)
+    @DisplayName("POST /users/me/profile-picture should reject unauthenticated request")
+    void testUploadProfilePictureUnauthenticated() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "avatar.png", "image/png", createTinyPng()
+        );
+
+        mockMvc.perform(multipart("/users/me/profile-picture")
+                        .file(file))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @Order(97)
+    @DisplayName("DELETE /users/me/profile-picture should remove profile picture")
+    void testDeleteProfilePicture() throws Exception {
+        mockMvc.perform(delete("/users/me/profile-picture")
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Profile picture removed")));
+
+        // Verify it's gone
+        User user = userRepository.findByUsername("extra_user1").orElseThrow();
+        assertNull(user.getProfilePicture());
+        assertFalse(user.getHasProfilePicture());
+    }
+
+    @Test
+    @Order(98)
+    @DisplayName("GET /users/search should include hasProfilePicture field")
+    void testSearchIncludesHasProfilePicture() throws Exception {
+        // Upload a picture for user2 first
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "avatar.png", "image/png", createTinyPng()
+        );
+        mockMvc.perform(multipart("/users/me/profile-picture")
+                        .file(file)
+                        .header("Authorization", "Bearer " + user2Token))
+                .andExpect(status().isOk());
+
+        // Now search — user2 should have hasProfilePicture=true
+        MvcResult result = mockMvc.perform(get("/users/search")
+                        .param("q", "extra_user2")
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].hasProfilePicture").value(true))
+                .andReturn();
+    }
+
+    /**
+     * Creates a minimal valid 1x1 red PNG file (67 bytes).
+     */
+    private byte[] createTinyPng() {
+        // Minimal 1x1 red pixel PNG
+        return new byte[]{
+                (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+                0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,         // IHDR chunk
+                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,         // 1x1
+                0x08, 0x02,                                               // 8-bit RGB
+                0x00, 0x00, 0x00, 0x00, (byte) 0x90, 0x77, 0x53,        // CRC
+                (byte) 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44,       // IDAT chunk
+                0x41, 0x54, 0x08, (byte) 0xD7, 0x63, (byte) 0xF8,
+                (byte) 0xCF, (byte) 0xC0, 0x00, 0x00, 0x00, 0x02,
+                0x00, 0x01, (byte) 0xE2, 0x21, (byte) 0xBC, 0x33,      // CRC
+                0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44,        // IEND chunk
+                (byte) 0xAE, 0x42, 0x60, (byte) 0x82                    // CRC
+        };
     }
 }
