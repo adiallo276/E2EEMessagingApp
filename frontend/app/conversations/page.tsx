@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ui/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { api, apiUpload, profilePictureUrl } from "@/lib/api";
+import { resizeImage } from "@/lib/image-utils";
+import BenchmarkPanel from "@/components/ui/benchmark-panel";
 
 type Conversation = {
   id: number;
@@ -30,6 +33,75 @@ export default function ConversationsPage() {
   const [creating, setCreating] = useState(false);
   const [selectedAlg, setSelectedAlg] = useState<"kyber" | "frodo" | "ntru" | "ecdh">("kyber");
 
+  const [searchResults, setSearchResults] = useState<{ id: number; username: string; hasProfilePicture?: boolean }[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Profile picture state
+  const [avatarKey, setAvatarKey] = useState(0); // bump to force re-render after upload
+  const [uploadingPic, setUploadingPic] = useState(false);
+  const picInputRef = useRef<HTMLInputElement>(null);
+
+  // Benchmark panel state
+  const [showBenchmark, setShowBenchmark] = useState(false);
+
+  function handleSearchInput(value: string) {
+    setNewUser(value);
+    setShowDropdown(true);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (value.trim().length === 0) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const results = await api(`/users/search?q=${encodeURIComponent(value.trim())}`);
+        setSearchResults(results);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+  }
+
+  function selectUser(uname: string) {
+    setNewUser(uname);
+    setShowDropdown(false);
+    setSearchResults([]);
+  }
+
+  async function handleProfilePicUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file");
+      return;
+    }
+
+    setUploadingPic(true);
+    setError(null);
+
+    try {
+      const resized = await resizeImage(file, 256);
+      await apiUpload("/users/me/profile-picture", resized);
+      setAvatarKey((k) => k + 1); // force avatar image refresh
+    } catch (err: any) {
+      setError(err?.message || "Failed to upload profile picture");
+    } finally {
+      setUploadingPic(false);
+      if (picInputRef.current) picInputRef.current.value = "";
+    }
+  }
+
   function formatLastMessage(msg: any, myUsername: string): string {
     if (!msg || !msg.content) return "";
     
@@ -43,6 +115,9 @@ export default function ConversationsPage() {
     } catch {
       if (msg.content.startsWith("IMG:")) {
         return prefix + "📷 Image";
+      }
+      if (msg.content.startsWith("VOICE:")) {
+        return prefix + "🎤 Voice message";
       }
       const text = msg.content.length > 35 
         ? msg.content.substring(0, 35) + "..." 
@@ -194,22 +269,72 @@ export default function ConversationsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <div className="flex h-screen">
+    <main className="flex-1 overflow-auto bg-background text-foreground">
+      {/* Hidden file input for profile picture */}
+      <input
+        type="file"
+        ref={picInputRef}
+        onChange={handleProfilePicUpload}
+        accept="image/*"
+        className="hidden"
+      />
+
       {/* Header */}
       <div className="mx-auto max-w-6xl px-6 py-6 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="h-9 w-9 rounded-xl bg-primary/20 border border-border grid place-items-center">
-            <span className="text-sm font-bold">Q</span>
-          </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => picInputRef.current?.click()}
+            disabled={uploadingPic}
+            className="relative group"
+            title="Change profile picture"
+          >
+            <Avatar className="h-10 w-10 border border-border">
+              {username && (
+                <AvatarImage
+                  key={avatarKey}
+                  src={profilePictureUrl(username)}
+                  alt={username}
+                />
+              )}
+              <AvatarFallback className="bg-primary/20 text-sm font-bold">
+                {username ? username.charAt(0).toUpperCase() : "Q"}
+              </AvatarFallback>
+            </Avatar>
+            <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              {uploadingPic ? (
+                <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              )}
+            </div>
+          </button>
           <div>
-            <div className="font-semibold tracking-tight leading-tight">Q-Messaging</div>
+            <div className="font-semibold tracking-tight leading-tight">Post-Quantum Messaging Service</div>
             <div className="text-xs text-muted-foreground">
-              {username ? `Signed in as ${username}` : "Secure chat • Optional E2EE • PQC-ready"}
+              {username ? `Signed in as ${username}` : "Secure chat • E2EE • PQC-ready"}
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowBenchmark(!showBenchmark)}
+            className={`h-8 px-3 gap-1.5 ${showBenchmark ? "bg-muted" : ""}`}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <span className="text-xs">Benchmarks</span>
+          </Button>
           <ThemeToggle />
           <Button
             variant="outline"
@@ -245,10 +370,10 @@ export default function ConversationsPage() {
             </div>
             <div className="flex-1">
               <div className="font-semibold flex items-center gap-2">
-                ChatGPT Bot
+                ChatGPT API
                 <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-600">Testing</span>
               </div>
-              <div className="text-sm text-muted-foreground">Test end-to-end encryption without a second account. Supports images!</div>
+              <div className="text-sm text-muted-foreground">Start a chat with ChatGPT!</div>
             </div>
             <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -297,25 +422,38 @@ export default function ConversationsPage() {
                   No conversations yet. Start one →
                 </div>
               ) : (
-                conversations.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => router.push(`/messages/${c.id}`)}
-                    className="w-full text-left rounded-xl border border-border bg-background/40 hover:bg-background px-3 py-3 transition group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium">{otherUser(c)}</div>
-                      {c.lastMessageTime && (
-                        <div className="text-[10px] text-muted-foreground">
-                          {formatTime(c.lastMessageTime)}
+                conversations.map((c) => {
+                  const other = otherUser(c);
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => router.push(`/messages/${c.id}`)}
+                      className="w-full text-left rounded-xl border border-border bg-background/40 hover:bg-background px-3 py-3 transition group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9 shrink-0 border border-border">
+                          <AvatarImage src={profilePictureUrl(other)} alt={other} />
+                          <AvatarFallback className="bg-primary/10 text-xs font-medium">
+                            {other.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium">{other}</div>
+                            {c.lastMessageTime && (
+                              <div className="text-[10px] text-muted-foreground">
+                                {formatTime(c.lastMessageTime)}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                            {c.lastMessage || "No messages yet"}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1 truncate">
-                      {c.lastMessage || "No messages yet"}
-                    </div>
-                  </button>
-                ))
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
           </div>
@@ -325,22 +463,59 @@ export default function ConversationsPage() {
             <div className="p-4 border-b border-border">
               <div className="font-medium">Start a new conversation</div>
               <div className="text-xs text-muted-foreground">
-                Enter the other user's exact username (must already be registered)
+                Search for a user by username
               </div>
             </div>
 
             <div className="p-4 space-y-4">
               <div>
                 <label className="text-xs text-muted-foreground mb-1.5 block">Username</label>
-                <input
-                  className="w-full rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="e.g. admin"
-                  value={newUser}
-                  onChange={(e) => setNewUser(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && newUser.trim()) createConversation();
-                  }}
-                />
+                <div className="relative">
+                  <input
+                    className="w-full rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="Search for a user..."
+                    value={newUser}
+                    onChange={(e) => handleSearchInput(e.target.value)}
+                    onFocus={() => { if (searchResults.length > 0) setShowDropdown(true); }}
+                    onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newUser.trim()) createConversation();
+                    }}
+                  />
+
+                  {showDropdown && newUser.trim().length > 0 && (
+                    <div className="absolute z-50 mt-1 w-full rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+                      {searching ? (
+                        <div className="px-3 py-3 text-sm text-muted-foreground text-center">
+                          Searching...
+                        </div>
+                      ) : searchResults.length > 0 ? (
+                        searchResults.map((user) => (
+                          <button
+                            key={user.id}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => selectUser(user.username)}
+                            className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50 transition flex items-center gap-2 border-b border-border last:border-0"
+                          >
+                            <Avatar className="h-7 w-7 shrink-0 border border-border">
+                              {user.hasProfilePicture && (
+                                <AvatarImage src={profilePictureUrl(user.username)} alt={user.username} />
+                              )}
+                              <AvatarFallback className="bg-primary/10 text-xs font-medium">
+                                {user.username.charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span>{user.username}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-3 text-sm text-muted-foreground text-center">
+                          No users found
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div>
@@ -374,7 +549,7 @@ export default function ConversationsPage() {
               </Button>
 
               <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                <div className="font-medium mb-1">💡 About the algorithms:</div>
+                <div className="font-medium mb-1">About the algorithms:</div>
                 <ul className="space-y-1 text-[11px]">
                   <li><span className="text-indigo-600 dark:text-indigo-400 font-medium">Kyber</span> — Post-quantum (Ring-LWE), fastest PQC option</li>
                   <li><span className="text-orange-600 dark:text-orange-400 font-medium">Frodo</span> — Post-quantum (LWE), more conservative security</li>
@@ -388,9 +563,11 @@ export default function ConversationsPage() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-xs text-muted-foreground">
-          Designed by Abdoulahi Diallo for Final Year Project
+          Created by Abdoulahi Diallo for Final Year Project
         </div>
       </div>
     </main>
+    <BenchmarkPanel isOpen={showBenchmark} onClose={() => setShowBenchmark(false)} />
+    </div>
   );
 }

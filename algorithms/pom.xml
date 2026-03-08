@@ -11,6 +11,7 @@
   <modules>
     <module>miniKyber</module>
     <module>miniFrodo</module>
+    <module>miniNTRU</module>
   </modules>
 
   <properties>

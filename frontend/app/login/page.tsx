@@ -83,7 +83,7 @@ export default function LoginPage() {
       {/* Left promo */}
       <div className="hidden lg:flex flex-col justify-between p-10 border-r border-border bg-card">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-primary/20 border border-border grid place-items-center">
               <span className="text-sm font-bold">Q</span>
             </div>
@@ -91,11 +91,10 @@ export default function LoginPage() {
           </div>
 
           <h2 className="mt-10 text-3xl font-semibold leading-tight">
-            PQC <span className="text-primary">+</span> E2EE toggle
+            PQC <span className="text-primary">+</span> E2EE
           </h2>
           <p className="mt-3 text-muted-foreground max-w-md leading-relaxed">
-            Messaging app that uses lattice-based post-quantum cryptographic algorithms to secure
-            your conversations.
+            Messaging app that uses post-quantum cryptographic algorithms to encrypt messages end-to-end.
           </p>
 
           <div className="mt-8 grid gap-3">
@@ -110,6 +109,10 @@ export default function LoginPage() {
             <div className="rounded-xl border border-border bg-background p-4 text-sm">
               <div className="font-medium">PQC-ready architecture</div>
               <div className="text-muted-foreground mt-1">Mini-Kyber, Mini-Frodo, and Mini-NTRU</div>
+            </div>
+            <div className="rounded-xl border border-border bg-background p-4 text-sm">
+              <div className="font-medium">ChatGPT plugged in</div>
+              <div className="text-muted-foreground mt-1">Start a conversation with ChatGPT using one of the algorithms</div>
             </div>
           </div>
         </div>
@@ -193,7 +196,7 @@ export default function LoginPage() {
           </div>
 
           <div className="mt-6 text-[11px] text-muted-foreground">
-            This is a demo app for a project. Do not use real credentials.
+            This is an app built for Final Year Project.
           </div>
         </div>
       </div>

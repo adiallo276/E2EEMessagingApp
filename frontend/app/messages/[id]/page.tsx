@@ -6,7 +6,8 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, profilePictureUrl } from "@/lib/api";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Client, IMessage, StompSubscription } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import {
@@ -28,6 +29,7 @@ import {
 // ============ Constants ============
 
 const IMAGE_PREFIX = "IMG:";
+const VOICE_PREFIX = "VOICE:";
 
 const ALG_INFO: Record<KemAlg, { name: string; color: string; bg: string; desc: string }> = {
   kyber: { name: "Kyber", color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/20", desc: "Post-quantum (Ring-LWE)" },
@@ -50,6 +52,7 @@ type Message = {
 type ViewMessage = Message & {
   displayContent: string;
   imageData?: { mimeType: string; data: string };
+  voiceData?: { mimeType: string; data: string };
 };
 
 type PendingInvite = {
@@ -96,6 +99,25 @@ function createImageMessage(mimeType: string, base64Data: string): string {
   return `${IMAGE_PREFIX}${mimeType}:${base64Data}`;
 }
 
+function isVoiceMessage(content: string): boolean {
+  return content.startsWith(VOICE_PREFIX);
+}
+
+function parseVoiceMessage(content: string): { mimeType: string; data: string } | null {
+  if (!isVoiceMessage(content)) return null;
+  const withoutPrefix = content.slice(VOICE_PREFIX.length);
+  const colonIndex = withoutPrefix.indexOf(":");
+  if (colonIndex === -1) return null;
+  return {
+    mimeType: withoutPrefix.slice(0, colonIndex),
+    data: withoutPrefix.slice(colonIndex + 1),
+  };
+}
+
+function createVoiceMessage(mimeType: string, base64Data: string): string {
+  return `${VOICE_PREFIX}${mimeType}:${base64Data}`;
+}
+
 function formatMessageTime(timestamp?: string): string {
   if (!timestamp) return "";
   const date = new Date(timestamp);
@@ -137,6 +159,9 @@ export default function MessagesPage() {
   const [showDisableWarning, setShowDisableWarning] = useState<boolean>(false);
   const [showBenchmark, setShowBenchmark] = useState<boolean>(false);
   const [sendingImage, setSendingImage] = useState<boolean>(false);
+  const [recording, setRecording] = useState<boolean>(false);
+  const [sendingVoice, setSendingVoice] = useState<boolean>(false);
+  const [recordingDuration, setRecordingDuration] = useState<number>(0);
 
   // Typing & read receipts
   const [otherUserTyping, setOtherUserTyping] = useState<boolean>(false);
@@ -153,6 +178,10 @@ export default function MessagesPage() {
   const rawMessagesRef = useRef<Message[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
 
   // ============ Helper Functions ============
 
@@ -180,6 +209,7 @@ export default function MessagesPage() {
         if (env.type === "E2EE_MSG") return "🔒 Encrypted message";
       } catch {
         if (msg.content.startsWith("IMG:")) return prefix + "📷 Image";
+        if (msg.content.startsWith("VOICE:")) return prefix + "🎤 Voice message";
         const text = msg.content.length > 30 ? msg.content.substring(0, 30) + "..." : msg.content;
         return prefix + text;
       }
@@ -193,6 +223,8 @@ export default function MessagesPage() {
     if (!env) {
       const imgData = parseImageMessage(m.content);
       if (imgData) return { ...m, displayContent: "[Image]", imageData: imgData };
+      const voiceData = parseVoiceMessage(m.content);
+      if (voiceData) return { ...m, displayContent: "[Voice Message]", voiceData };
       return { ...m, displayContent: m.content };
     }
 
@@ -212,6 +244,8 @@ export default function MessagesPage() {
           const { plaintext } = await benchmarkedDecryptChatMessage(conversationId, env);
           const imgData = parseImageMessage(plaintext);
           if (imgData) return { ...m, displayContent: "[Image]", imageData: imgData };
+          const voiceData = parseVoiceMessage(plaintext);
+          if (voiceData) return { ...m, displayContent: "[Voice Message]", voiceData };
           return { ...m, displayContent: plaintext };
         } catch {
           return { ...m, displayContent: "🔒 Encrypted message" };
@@ -622,6 +656,94 @@ export default function MessagesPage() {
     }
   }
 
+  async function startRecording() {
+    try {
+      setError(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      audioChunksRef.current = [];
+
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.start();
+      setRecording(true);
+      setRecordingDuration(0);
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingDuration((d) => d + 1);
+      }, 1000);
+    } catch (err: any) {
+      setError("Microphone access denied");
+    }
+  }
+
+  async function stopRecordingAndSend() {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+
+    setSendingVoice(true);
+
+    // Wait for the recorder to finish
+    await new Promise<void>((resolve) => {
+      recorder.onstop = () => resolve();
+      recorder.stop();
+    });
+
+    // Stop all mic tracks
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+    mediaStreamRef.current = null;
+
+    setRecording(false);
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+
+    const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+
+    if (blob.size > 2 * 1024 * 1024) {
+      setError("Recording too long (max 2MB)");
+      setSendingVoice(false);
+      return;
+    }
+
+    try {
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      const mimeType = recorder.mimeType || "audio/webm";
+      await sendMessage(createVoiceMessage(mimeType, base64Data));
+    } catch (err: any) {
+      setError(err?.message || "Failed to send voice message");
+    } finally {
+      setSendingVoice(false);
+    }
+  }
+
+  function cancelRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+    mediaStreamRef.current = null;
+    mediaRecorderRef.current = null;
+    audioChunksRef.current = [];
+    setRecording(false);
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+  }
+
   // ============ UI Handlers ============
 
   function handleE2eeToggle(checked: boolean) {
@@ -751,8 +873,16 @@ export default function MessagesPage() {
                 </Button>
                 
                 <div className="flex items-center gap-2">
+                  <Avatar className="h-8 w-8 border border-border">
+                    {otherUsername && (
+                      <AvatarImage src={profilePictureUrl(otherUsername)} alt={otherUsername} />
+                    )}
+                    <AvatarFallback className="bg-primary/10 text-xs font-medium">
+                      {otherUsername ? otherUsername.charAt(0).toUpperCase() : "?"}
+                    </AvatarFallback>
+                  </Avatar>
                   <span className="font-semibold">{otherUsername || "Conversation"}</span>
-                  
+
                   {e2eeEnabled ? (
                     <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${
                       e2eeReady 
@@ -982,11 +1112,22 @@ export default function MessagesPage() {
                             <span className="font-medium">{m.senderUsername ?? "Unknown"}</span>
                             <span className="text-[10px] shrink-0">{formatMessageTime(m.timestamp)}</span>
                           </div>
-                          {m.imageData ? (
-                            <img 
-                              src={`data:${m.imageData.mimeType};base64,${m.imageData.data}`} 
-                              alt="Image" 
-                              className="max-w-full rounded-lg max-h-64 object-contain" 
+                          {m.voiceData ? (
+                            <div className="flex items-center gap-2">
+                              <svg className="w-4 h-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                              </svg>
+                              <audio
+                                controls
+                                src={`data:${m.voiceData.mimeType};base64,${m.voiceData.data}`}
+                                className="max-w-[240px] h-8"
+                              />
+                            </div>
+                          ) : m.imageData ? (
+                            <img
+                              src={`data:${m.imageData.mimeType};base64,${m.imageData.data}`}
+                              alt="Image"
+                              className="max-w-full rounded-lg max-h-64 object-contain"
                             />
                           ) : (
                             <p className="whitespace-pre-wrap break-words">{m.displayContent}</p>
@@ -1058,23 +1199,70 @@ export default function MessagesPage() {
                   )}
                 </button>
 
-                <input
-                  type="text"
-                  className="flex-1 h-10 rounded-lg border border-border bg-muted/30 px-4 text-sm outline-none focus:ring-2 focus:ring-ring focus:bg-background transition-colors"
-                  value={content}
-                  onChange={(e) => handleInputChange(e.target.value)}
-                  placeholder={inputDisabled ? "Waiting for encryption..." : e2eeEnabled ? "Type a message..." : "Type a message (unencrypted)..."}
-                  disabled={inputDisabled}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                />
-                
-                <Button 
-                  onClick={send} 
-                  disabled={inputDisabled || !content.trim()} 
-                  className="h-10 px-5"
+                {/* Mic button */}
+                <button
+                  onClick={recording ? stopRecordingAndSend : startRecording}
+                  disabled={inputDisabled || sendingVoice}
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    recording
+                      ? "border-red-500 bg-red-500/20 text-red-500"
+                      : "border-border bg-muted/30 hover:bg-muted text-muted-foreground"
+                  }`}
+                  title={recording ? "Stop & send" : "Record voice message"}
                 >
-                  Send
-                </Button>
+                  {sendingVoice ? (
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : recording ? (
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <rect x="6" y="6" width="12" height="12" rx="2" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                  )}
+                </button>
+
+                {recording ? (
+                  <div className="flex-1 h-10 rounded-lg border border-red-500/30 bg-red-500/10 px-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-sm text-red-500 font-medium">
+                        {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, "0")}
+                      </span>
+                      <span className="text-xs text-muted-foreground">Recording...</span>
+                    </div>
+                    <button
+                      onClick={cancelRecording}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    className="flex-1 h-10 rounded-lg border border-border bg-muted/30 px-4 text-sm outline-none focus:ring-2 focus:ring-ring focus:bg-background transition-colors"
+                    value={content}
+                    onChange={(e) => handleInputChange(e.target.value)}
+                    placeholder={inputDisabled ? "Waiting for encryption..." : e2eeEnabled ? "Type a message..." : "Type a message (unencrypted)..."}
+                    disabled={inputDisabled}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                  />
+                )}
+
+                {!recording && (
+                  <Button
+                    onClick={send}
+                    disabled={inputDisabled || !content.trim()}
+                    className="h-10 px-5"
+                  >
+                    Send
+                  </Button>
+                )}
               </div>
               
               <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">

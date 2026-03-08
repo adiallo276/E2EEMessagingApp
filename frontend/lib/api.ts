@@ -34,3 +34,43 @@ export async function api(path: string, options: RequestInit = {}) {
   }
   return res.text();
 }
+
+/**
+ * Upload a file via multipart/form-data (used for profile picture uploads).
+ * Does NOT set Content-Type — the browser sets the correct multipart boundary automatically.
+ */
+export async function apiUpload(path: string, file: File) {
+  if (typeof window === "undefined") {
+    throw new Error("apiUpload() should only be called from the client");
+  }
+
+  const token = localStorage.getItem("token");
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Upload error ${res.status}: ${text}`);
+  }
+
+  return res.text();
+}
+
+/**
+ * Returns the absolute URL for a user's profile picture.
+ * Use as an <img src> value — the backend serves raw image bytes at this path.
+ */
+export function profilePictureUrl(username: string): string {
+  return `${process.env.NEXT_PUBLIC_API_URL}/users/${encodeURIComponent(username)}/profile-picture`;
+}

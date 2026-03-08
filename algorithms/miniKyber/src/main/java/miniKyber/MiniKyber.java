@@ -76,19 +76,15 @@ public class MiniKyber {
         Polynomial a = keyPair.getA();
         Polynomial t = keyPair.getT();
 
-        // Ephemeral randomness
         Polynomial r  = Polynomial.randomSmall(rnd);
         Polynomial e1 = Polynomial.randomSmall(rnd);
         Polynomial e2 = Polynomial.randomSmall(rnd);
 
-        // Random one-bit message m in {0,1}
         int m = rnd.nextBoolean() ? 1 : 0;
         Polynomial mPoly = encodeMessageBit(m);
 
-        // u = a*r + e1
         Polynomial u = a.mul(r).add(e1);
 
-        // v = t*r + e2 + mPoly
         Polynomial v = t.mul(r).add(e2).add(mPoly);
 
         Ciphertext ct = new Ciphertext(u, v);

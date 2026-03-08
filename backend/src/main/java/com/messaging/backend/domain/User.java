@@ -1,5 +1,7 @@
 package com.messaging.backend.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 
 @Entity
@@ -13,25 +15,36 @@ public class User {
     @Column(unique = true)
     private String username;
 
+    @JsonIgnore
     private String password;
 
+    @JsonIgnore
     private String roles = "USER";
 
+    @JsonIgnore
     @Lob
     @Column(name = "kyber_public_a")
     private String kyberPublicA;
 
+    @JsonIgnore
     @Lob
     @Column(name = "kyber_public_t")
     private String kyberPublicT;
 
+    @JsonIgnore
     @Lob
     @Column(name = "frodo_public_a")
     private String frodoPublicA;
 
+    @JsonIgnore
     @Lob
     @Column(name = "frodo_public_b")
     private String frodoPublicB;
+
+    @JsonIgnore
+    @Lob
+    @Column(name = "profile_picture")
+    private String profilePicture;
 
     public User() {}
 
@@ -62,4 +75,10 @@ public class User {
 
     public String getFrodoPublicB() { return frodoPublicB; }
     public void setFrodoPublicB(String frodoPublicB) { this.frodoPublicB = frodoPublicB; }
+
+    public String getProfilePicture() { return profilePicture; }
+    public void setProfilePicture(String profilePicture) { this.profilePicture = profilePicture; }
+
+    @JsonProperty("hasProfilePicture")
+    public boolean getHasProfilePicture() { return profilePicture != null; }
 }

@@ -1,93 +1,226 @@
-# FYP 
+# Post-Quantum Cryptography Messaging Application
 
+A real-time end-to-end encrypted messaging application implementing and benchmarking post-quantum cryptographic algorithms.
 
+## Overview
 
-## Getting started
+This Final Year Project demonstrates the practical integration of post-quantum Key Encapsulation Mechanisms (KEMs) into a web-based messaging application. The system implements three PQC algorithms—Mini-Kyber, Mini-Frodo, and Mini-NTRU—alongside traditional ECDH for performance comparison.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+**Key Features:**
+- True end-to-end encryption (all cryptography client-side)
+- User-selectable encryption algorithms
+- Comprehensive benchmarking infrastructure
+- OpenAI ChatGPT integration with PQC encryption
+- Voice message support with E2EE
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## Project Structure
 
 ```
-cd existing_repo
-git remote add origin https://git.cs.bham.ac.uk/axd764/fyp.git
-git branch -M main
-git push -uf origin main
+FYP/
+├── backend/                 # Spring Boot backend
+│   └── src/main/java/com/messaging/backend/
+│       ├── algorithms/      # Java PQC implementations
+│       ├── config/          # Security, WebSocket config
+│       ├── controller/      # REST & WebSocket controllers
+│       └── service/         # Business logic
+├── frontend/                # Next.js frontend
+│   └── lib/crypto/          # TypeScript PQC implementations
+│       ├── mini-kyber.ts    # Ring-LWE based KEM
+│       ├── mini-frodo.ts    # Standard LWE based KEM
+│       ├── mini-ntru.ts     # NTRU lattice KEM
+│       ├── ecdh.ts          # Traditional ECDH (baseline)
+│       ├── aes.ts           # AES-GCM encryption
+│       └── benchmark.ts     # Performance testing
+├── algorithms/              # Standalone Java implementations
+│   ├── miniKyber/
+│   ├── miniFrodo/
+│   └── miniNTRU/
+└── Report/                  # LaTeX report
 ```
 
-## Integrate with your tools
+## Technology Stack
 
-- [ ] [Set up project integrations](https://git.cs.bham.ac.uk/axd764/fyp/-/settings/integrations)
+### Backend
+- **Java 21** with **Spring Boot 3.2**
+- Spring Security with JWT authentication
+- Spring WebSocket with STOMP protocol
+- Spring Data JPA with H2 in-memory database
+- Bouncy Castle for cryptographic primitives
 
-## Collaborate with your team
+### Frontend
+- **Next.js 14** with **TypeScript**
+- React 18 with Tailwind CSS
+- shadcn/ui component library
+- WebCrypto API for AES-GCM and ECDH
+- SockJS for WebSocket compatibility
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+### Why These Technologies?
 
-## Test and Deploy
+**Java/Spring Boot**: Mature ecosystem with production-ready security frameworks, strong typing for cryptographic safety, and excellent WebSocket support.
 
-Use the built-in continuous integration in GitLab.
+**Next.js/TypeScript**: Type safety essential for correct handling of `Uint8Array`, polynomial coefficients, and matrix operations. Native WebCrypto API access enables hardware-accelerated AES-GCM.
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+## Prerequisites
 
-***
+- Java 21 or later
+- Node.js 18 or later
+- npm or yarn
 
-# Editing this README
+## Running the Application
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### Backend
 
-## Suggestions for a good README
+```bash
+cd backend
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+# Using Maven wrapper
+./mvnw spring-boot:run
 
-## Name
-Choose a self-explaining name for your project.
+# Or with Maven installed
+mvn spring-boot:run
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+The backend starts on `http://localhost:8080`
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### Frontend
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+```bash
+cd frontend
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+# Install dependencies
+npm install
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+# Development mode
+npm run dev
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+# Production build
+npm run build && npm start
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+The frontend starts on `http://localhost:3000`
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+### Environment Variables
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Create `frontend/.env.local`:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8080
+NEXT_PUBLIC_WS_URL=ws://localhost:8080/ws
+OPENAI_API_KEY=your_openai_api_key  # Optional, for AI chat
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+## Running the Standalone Algorithms
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+The `/algorithms` directory contains standalone Maven modules for each PQC implementation:
+
+```bash
+cd algorithms
+
+# Build all modules
+mvn clean install
+
+# Run individual tests
+cd miniKyber && mvn exec:java -Dexec.mainClass="miniKyber.MiniKyberTest"
+cd miniFrodo && mvn exec:java -Dexec.mainClass="miniFrodo.MiniFrodoTest"
+cd miniNTRU && mvn exec:java -Dexec.mainClass="miniNTRU.MiniNTRUTest"
+```
+
+## Benchmarking
+
+### In-App Benchmarking
+
+1. Navigate to the Benchmarks page in the application
+2. Configure parameters:
+   - **Iterations**: 100–5,000 (higher = more accurate)
+   - **Sessions**: Number of simulated messaging sessions
+   - **Message size**: 1KB–500KB
+3. Run KEM benchmark or Session Throughput benchmark
+4. Export results to CSV for analysis
+
+### Quick Performance Test
+
+```typescript
+// In browser console on the app
+import { runKEMBenchmark } from './lib/crypto/benchmark';
+const results = await runKEMBenchmark(1000); // 1000 iterations
+console.table(results);
+```
+
+## Algorithm Implementations
+
+### Mini-Kyber (Ring-LWE)
+- Ring: ℤq[x]/(x^n + 1) with n=256, q=3329
+- Operations: Polynomial multiplication via schoolbook method
+- Security: Based on Ring-LWE problem
+
+### Mini-Frodo (Standard LWE)
+- Matrix-based with reduced dimensions (n=4, q=257)
+- Operations: Matrix-vector multiplication
+- Security: Based on plain LWE problem (conservative)
+
+### Mini-NTRU
+- Ring: ℤ[x]/(x^N - 1) with N=7, q=128
+- Operations: Cyclic convolution
+- Security: Based on NTRU lattice problem
+
+**Note**: These are educational implementations with reduced parameters. Production systems should use standardized libraries like liboqs.
+
+## E2EE Protocol
+
+The application uses a three-phase handshake:
+
+1. **E2EE_HELLO**: Initiator generates KEM keypair, sends public key
+2. **E2EE_KEY**: Responder encapsulates shared secret, sends ciphertext
+3. **E2EE_MSG**: Both derive AES-256-GCM key via HKDF, encrypt messages
+
+All cryptographic operations occur client-side. The server only sees ciphertexts.
+
+## API Endpoints
+
+### REST
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - JWT authentication
+- `GET /api/conversations` - List conversations
+- `POST /api/conversations` - Create conversation
+
+### WebSocket (STOMP)
+- `/app/chat.send` - Send encrypted message
+- `/topic/messages/{conversationId}` - Subscribe to messages
+- `/app/e2ee.hello` - Initiate key exchange
+- `/app/e2ee.key` - Complete key exchange
+
+## Benchmark Results Summary
+
+Tested on MacBook Pro M2, 16GB RAM, Safari:
+
+| Algorithm | Total KEM | Key Gen | Session Time |
+|-----------|-----------|---------|--------------|
+| Mini-Kyber | 174.20 μs | 3.40 μs | 730.81 ms |
+| Mini-Frodo | 179.60 μs | 11.60 μs | 741.14 ms |
+| Mini-NTRU | 287.00 μs | 7.00 μs | 740.52 ms |
+| ECDH | — | — | 739.84 ms |
+
+**Key Finding**: All PQC algorithms perform within 1.2% of traditional ECDH, with Kyber actually 1.2% faster.
+
+## Known Limitations
+
+- Mini implementations use reduced security parameters (educational only)
+- No constant-time guarantees in JavaScript
+- Single-platform benchmarks (Safari/M2)
+- No formal security verification
+
+## Future Work
+
+- Hybrid classical/PQC mode
+- WebAssembly compilation of production libraries
+- Group messaging support
+- Formal verification of implementations
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+This project was developed as a Final Year Project at [University Name].
+
+## Author
+
+Abdoulahi Diallo  
+Supervised by: Pieter Joubert  
+2025-2026
