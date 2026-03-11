@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ui/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Settings } from "lucide-react";
 import { api, apiUpload, profilePictureUrl } from "@/lib/api";
 import { resizeImage } from "@/lib/image-utils";
 import BenchmarkPanel from "@/components/ui/benchmark-panel";
@@ -239,15 +240,15 @@ export default function ConversationsPage() {
 
   const algConfig = {
     kyber: { 
-      bg: "bg-indigo-500/20", 
-      text: "text-indigo-600 dark:text-indigo-400",
+      bg: "bg-violet-500/20", 
+      text: "text-violet-600 dark:text-violet-400",
       name: "Kyber",
       desc: "Post-quantum (Ring-LWE)",
       badge: "PQC"
     },
     frodo: { 
-      bg: "bg-orange-500/20", 
-      text: "text-orange-600 dark:text-orange-400",
+      bg: "bg-fuchsia-500/20", 
+      text: "text-fuchsia-600 dark:text-fuchsia-400",
       name: "Frodo",
       desc: "Post-quantum (LWE)",
       badge: "PQC"
@@ -260,8 +261,8 @@ export default function ConversationsPage() {
       badge: "PQC"
     },
     ecdh: { 
-      bg: "bg-emerald-500/20", 
-      text: "text-emerald-600 dark:text-emerald-400",
+      bg: "bg-slate-500/20", 
+      text: "text-slate-600 dark:text-slate-400",
       name: "Classic",
       desc: "Traditional (ECDH P-256)",
       badge: "Standard"
@@ -323,7 +324,7 @@ export default function ConversationsPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
@@ -335,9 +336,19 @@ export default function ConversationsPage() {
             </svg>
             <span className="text-xs">Benchmarks</span>
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push('/settings')}
+            className="h-8 w-8 p-0"
+            title="Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </Button>
           <ThemeToggle />
           <Button
             variant="outline"
+            size="sm"
             onClick={() => {
               localStorage.removeItem("token");
               localStorage.removeItem("username");
@@ -361,9 +372,9 @@ export default function ConversationsPage() {
         <div className="mb-6">
           <button
             onClick={() => router.push('/bot')}
-            className="w-full rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 to-transparent p-4 hover:from-emerald-500/20 transition text-left flex items-center gap-4"
+            className="w-full rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 to-transparent p-4 hover:from-primary/20 transition text-left flex items-center gap-4"
           >
-            <div className="h-12 w-12 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-600">
+            <div className="h-12 w-12 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
               </svg>
@@ -371,7 +382,7 @@ export default function ConversationsPage() {
             <div className="flex-1">
               <div className="font-semibold flex items-center gap-2">
                 ChatGPT API
-                <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-600">Testing</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-primary/20 text-primary">AI Chat</span>
               </div>
               <div className="text-sm text-muted-foreground">Start a chat with ChatGPT!</div>
             </div>
@@ -551,10 +562,10 @@ export default function ConversationsPage() {
               <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
                 <div className="font-medium mb-1">About the algorithms:</div>
                 <ul className="space-y-1 text-[11px]">
-                  <li><span className="text-indigo-600 dark:text-indigo-400 font-medium">Kyber</span> — Post-quantum (Ring-LWE), fastest PQC option</li>
-                  <li><span className="text-orange-600 dark:text-orange-400 font-medium">Frodo</span> — Post-quantum (LWE), more conservative security</li>
+                  <li><span className="text-violet-600 dark:text-violet-400 font-medium">Kyber</span> — Post-quantum (Ring-LWE), fastest PQC option</li>
+                  <li><span className="text-fuchsia-600 dark:text-fuchsia-400 font-medium">Frodo</span> — Post-quantum (LWE), more conservative security</li>
                   <li><span className="text-purple-600 dark:text-purple-400 font-medium">NTRU</span> — Post-quantum (Lattice), one of the oldest PQC schemes</li>
-                  <li><span className="text-emerald-600 dark:text-emerald-400 font-medium">Classic</span> — Traditional ECDH (P-256), widely deployed standard</li>
+                  <li><span className="text-slate-600 dark:text-slate-400 font-medium">Classic</span> — Traditional ECDH (P-256), widely deployed standard</li>
                 </ul>
               </div>
             </div>
@@ -563,7 +574,7 @@ export default function ConversationsPage() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-xs text-muted-foreground">
-          Created by Abdoulahi Diallo for Final Year Project
+          Created by Abdoulahi Diallo
         </div>
       </div>
     </main>
