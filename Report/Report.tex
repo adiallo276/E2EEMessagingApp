@@ -1,13 +1,12 @@
 \documentclass[11pt,a4paper]{article}
 
-% ============ Packages ============
 \usepackage[utf8]{inputenc}
 \usepackage[margin=1in]{geometry}
 \usepackage{graphicx}
 \usepackage{amsmath, amssymb}
 \usepackage{listings}
 \usepackage{xcolor}
-\usepackage{hyperref}
+\usepackage[bookmarks=true,bookmarksopen=true,bookmarksnumbered=true,pdfstartview=FitH]{hyperref}
 \usepackage{float}
 \usepackage{booktabs}
 \usepackage{caption}
@@ -57,11 +56,9 @@
 
 % ============ Abstract ============
 \begin{abstract}
-\noindent The advent of quantum computing poses an existential threat to modern public-key cryptography, with algorithms such as RSA and Elliptic Curve Diffie-Hellman vulnerable to Shor's algorithm. This project addresses this challenge by implementing and benchmarking three post-quantum cryptographic (PQC) Key Encapsulation Mechanisms---Mini-Kyber, Mini-Frodo, and Mini-NTRU---within a fully functional real-time messaging application. Built using Spring Boot and Next.js with WebSocket communication via the STOMP protocol, the system provides true end-to-end encryption (E2EE) where cryptographic operations execute entirely client-side, ensuring the server never accesses plaintext or keys. Users can select their preferred algorithm at conversation initiation, with comprehensive benchmarking infrastructure measuring key generation, encapsulation, and decapsulation latencies across 5,000 iterations. Extensive throughput testing (500 sessions, 100 messages each, 500KB message size) reveals that Mini-Kyber outperforms traditional ECDH by 1.2\%, while all PQC algorithms operate within 1\% overhead of classical cryptography. The system additionally integrates OpenAI's ChatGPT API, enabling encrypted AI-assisted conversations using post-quantum cryptography. This work demonstrates that quantum-resistant messaging is practically achievable today without compromising performance.
+\noindent The advent of quantum computing poses an existential threat to modern public-key cryptography, with algorithms such as RSA and Elliptic Curve Diffie-Hellman vulnerable to Shor's algorithm. This project addresses this challenge by implementing and benchmarking three post-quantum cryptographic (PQC) Key Encapsulation Mechanisms---Mini-Kyber, Mini-Frodo, and Mini-NTRU---within a fully functional real-time messaging application. Built using Spring Boot and Next.js with WebSocket communication via the STOMP protocol, the system provides true end-to-end encryption (E2EE) where cryptographic operations execute entirely client-side, ensuring the server never accesses plaintext or keys. Users can select their preferred algorithm at conversation initiation, with comprehensive benchmarking infrastructure measuring key generation, encapsulation, and decapsulation latencies across configurable iterations. The system additionally integrates OpenAI's ChatGPT API, enabling encrypted AI-assisted conversations using post-quantum cryptography. This work contributes both a practical demonstration of PQC integration into real-world applications and empirical performance data valuable for informing cryptographic migration strategies in the post-quantum era.
 \end{abstract}
 
-\tableofcontents
-\newpage
 
 % ============ Section 1: Introduction ============
 \section{Introduction}
@@ -81,7 +78,7 @@ This project was motivated by two complementary goals:
 \begin{enumerate}
     \item \textbf{Practical Implementation}: Demonstrate that post-quantum cryptographic algorithms can be integrated into real-world messaging applications without fundamentally altering user experience or requiring exotic infrastructure.
     
-    \item \textbf{Quantitative Analysis}: Provide empirical benchmarking data comparing the performance characteristics of multiple PQC algorithms against traditional ECDH, generating insights valuable for developers planning cryptographic migration strategies.
+    \item \textbf{Quantitative Analysis}: Provide empirical benchmarking data comparing the performance characteristics of multiple PQC algorithms against eachother and against traditional ECDH, generating valuable insights into how these algorithms perform in realistic scenarios.
 \end{enumerate}
 
 The final system implements three post-quantum Key Encapsulation Mechanisms---Mini-Kyber (based on Ring-LWE), Mini-Frodo (based on standard LWE), and Mini-NTRU (based on polynomial lattices)---alongside traditional ECDH (P-256) as a performance baseline.
@@ -150,7 +147,7 @@ The project initially targeted full CRYSTALS-Kyber implementation using JHipster
 
 \textbf{JHipster Challenges}: The generated codebase produced dependency conflicts when integrating WebSocket libraries and cryptographic dependencies. Debugging through thousands of lines of auto-generated code proved time-consuming, and extending the authentication flow for E2EE handshakes was difficult within JHipster's opinionated security configuration.
 
-\textbf{Full Kyber Complexity}: Production Kyber requires Number Theoretic Transform (NTT) implementation with primitive roots of unity, bit-reversal permutations, and Montgomery reduction. Additionally, constant-time code to prevent timing attacks is extremely difficult in JavaScript due to JIT compilation and garbage collection.
+\textbf{Full Kyber Complexity}: Production Kyber requires Number Theoretic Transform (NTT) implementation with primitive roots of unity, bit-reversal permutations, and Montgomery reduction. Additionally, constant-time code to prevent timing attacks is extremely difficult in JavaScript due to JIT compilation and garbage collection. The combination of these factors alongside computational limitations made the initial approach untenable within the project timeline.
 
 \subsection{Strategic Pivot}
 
@@ -404,7 +401,7 @@ Kyber's consistent leadership validates NIST's selection as the primary post-qua
 \begin{itemize}
     \item \textbf{Simplified Parameters}: Mini implementations use reduced parameters; production implementations would show different absolute timings
     \item \textbf{Browser Environment}: JavaScript lacks constant-time guarantees; production libraries use native C/assembly
-    \item \textbf{Single Platform}: Results are specific to Safari on Apple M2
+    \item \textbf{Single Platform}: Results are specific to Safari on Apple Macbook Pro, M2 chip 
 \end{itemize}
 
 % ============ Section 6: Critical Evaluation ============

@@ -2,10 +2,6 @@
 
 A real-time end-to-end encrypted messaging application implementing and benchmarking post-quantum cryptographic algorithms.
 
-## Overview
-
-This Final Year Project demonstrates the practical integration of post-quantum Key Encapsulation Mechanisms (KEMs) into a web-based messaging application. The system implements three PQC algorithms—Mini-Kyber, Mini-Frodo, and Mini-NTRU—alongside traditional ECDH for performance comparison.
-
 **Key Features:**
 - True end-to-end encryption (all cryptography client-side)
 - User-selectable encryption algorithms
@@ -53,12 +49,6 @@ FYP/
 - shadcn/ui component library
 - WebCrypto API for AES-GCM and ECDH
 - SockJS for WebSocket compatibility
-
-### Why These Technologies?
-
-**Java/Spring Boot**: Mature ecosystem with production-ready security frameworks, strong typing for cryptographic safety, and excellent WebSocket support.
-
-**Next.js/TypeScript**: Type safety essential for correct handling of `Uint8Array`, polynomial coefficients, and matrix operations. Native WebCrypto API access enables hardware-accelerated AES-GCM.
 
 ## Prerequisites
 
@@ -188,36 +178,9 @@ All cryptographic operations occur client-side. The server only sees ciphertexts
 - `/app/e2ee.hello` - Initiate key exchange
 - `/app/e2ee.key` - Complete key exchange
 
-## Benchmark Results Summary
-
-Tested on MacBook Pro M2, 16GB RAM, Safari:
-
-| Algorithm | Total KEM | Key Gen | Session Time |
-|-----------|-----------|---------|--------------|
-| Mini-Kyber | 174.20 μs | 3.40 μs | 730.81 ms |
-| Mini-Frodo | 179.60 μs | 11.60 μs | 741.14 ms |
-| Mini-NTRU | 287.00 μs | 7.00 μs | 740.52 ms |
-| ECDH | — | — | 739.84 ms |
-
-**Key Finding**: All PQC algorithms perform within 1.2% of traditional ECDH, with Kyber actually 1.2% faster.
-
-## Known Limitations
-
-- Mini implementations use reduced security parameters (educational only)
-- No constant-time guarantees in JavaScript
-- Single-platform benchmarks (Safari/M2)
-- No formal security verification
-
-## Future Work
-
-- Hybrid classical/PQC mode
-- WebAssembly compilation of production libraries
-- Group messaging support
-- Formal verification of implementations
-
 ## License
 
-This project was developed as a Final Year Project at [University Name].
+This project was developed as a Final Year Project at University of Birmingham.
 
 ## Author
 

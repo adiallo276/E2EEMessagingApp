@@ -1,21 +1,32 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { BenchmarkProvider } from "@/lib/benchmark-context";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+// Modern, friendly sans-serif font
+const inter = Inter({ 
+  variable: "--font-geist-sans", 
+  subsets: ["latin"],
+  display: "swap",
+});
+
+// Clean mono font for code
+const jetbrainsMono = JetBrains_Mono({ 
+  variable: "--font-geist-mono", 
+  subsets: ["latin"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Q-Messaging",
-  description: "Messaging app for FYP",
+  description: "Post-Quantum Encrypted Messaging",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
         <ThemeProvider>
           <BenchmarkProvider>
             {children}
