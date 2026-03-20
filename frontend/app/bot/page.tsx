@@ -54,8 +54,8 @@ export default function BotChatPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState("");
-  const [showApiKeyInput, setShowApiKeyInput] = useState(true);
+  // API key is managed server-side via OPENAI_API_KEY in .env.local
+  // It is never stored in the browser or sent over the network from the client.
   const [showBenchmark, setShowBenchmark] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ mimeType: string; data: string } | null>(null);
   
@@ -68,13 +68,7 @@ export default function BotChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const savedKey = localStorage.getItem("openai_api_key");
-    if (savedKey) {
-      setApiKey(savedKey);
-      setShowApiKeyInput(false);
-    }
-  }, []);
+
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -199,12 +193,6 @@ export default function BotChatPage() {
 
   async function sendMessage() {
     if ((!input.trim() && !pendingImage) || isLoading) return;
-    if (!apiKey) {
-      setError("Please enter your OpenAI API key");
-      setShowApiKeyInput(true);
-      return;
-    }
-
     const userText = input.trim();
     setInput("");
     setIsLoading(true);
@@ -277,7 +265,6 @@ export default function BotChatPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          apiKey,
           messages: apiMessages,
           hasImages,
         }),
@@ -304,19 +291,6 @@ export default function BotChatPage() {
     } finally {
       setIsLoading(false);
     }
-  }
-
-  function saveApiKey() {
-    if (apiKey.trim()) {
-      localStorage.setItem("openai_api_key", apiKey.trim());
-      setShowApiKeyInput(false);
-    }
-  }
-
-  function clearApiKey() {
-    localStorage.removeItem("openai_api_key");
-    setApiKey("");
-    setShowApiKeyInput(true);
   }
 
   function handleAlgChange(alg: KemAlg) {
@@ -385,29 +359,10 @@ export default function BotChatPage() {
           </div>
         </div>
 
-        {/* API Key Input */}
-        {showApiKeyInput && (
-          <div className="border-b bg-amber-500/5 px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <input
-                  type="password"
-                  placeholder="Enter your OpenAI API key (sk-...)"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border bg-background"
-                />
-              </div>
-              <Button size="sm" onClick={saveApiKey}>Save</Button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Your API key is stored locally. Images use GPT-4o (Vision).
-            </p>
-          </div>
-        )}
+
 
         {/* Encryption Setup */}
-        {!encryption.ready && !showApiKeyInput && (
+        {!encryption.ready && (
           <div className="border-b bg-primary/5 px-4 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -602,11 +557,7 @@ export default function BotChatPage() {
                 ? `🔐 End-to-end encrypted with ${algInfo.name}`
                 : "Setup encryption to start chatting"}
             </div>
-            {!showApiKeyInput && (
-              <button onClick={clearApiKey} className="hover:underline">
-                Change API key
-              </button>
-            )}
+
           </div>
         </div>
       </div>

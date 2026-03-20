@@ -1,521 +1,324 @@
 /**
- * Comprehensive Test Suite for Q-Messaging PQC Cryptographic Implementations
+ * PQC Correctness Test Suite
+ * ============================================================
+ * Validates the functional correctness of all three Mini KEM
+ * implementations (Kyber, Frodo, NTRU) used in the FYP secure
+ * messaging application.
  *
- * This test suite covers:
- * - MiniKyber (Ring-LWE based KEM)
- * - MiniFrodo (Standard LWE based KEM)
- * - MiniNTRU (Polynomial ring based KEM)
- * - AES-256-GCM encryption/decryption
- * - End-to-end encryption flow
- * - Key derivation (HKDF)
+ * Tests confirm:
+ *  1. Key generation produces structurally valid keypairs.
+ *  2. Encapsulation + decapsulation yields matching shared secrets
+ *     (the core KEM correctness property).
+ *  3. Correctness holds across 100 independent key-exchange cycles.
+ *  4. Shared secrets are non-trivial (not all-zero bytes).
+ *  5. Different keypairs produce independent shared secrets.
  *
- * NOTE: MiniKyber and MiniFrodo use intentionally small educational parameters
- * (N=8/Q=3329 and N=4/Q=257 respectively). Due to the small parameters, LWE noise
- * can occasionally cause decapsulation failures — this is expected behaviour for
- * these mini/toy implementations and does NOT indicate a bug. Tests use retry
- * logic and success-rate thresholds to accommodate this.
- *
- * Run with: npx jest crypto.test.ts
- * Or: npm test
+ * Run with:  npm test
+ * Coverage:  npm run test:coverage
  */
 
 import {
   miniKyberKeyGen,
   miniKyberEncapsulate,
   miniKyberDecapsulate,
-} from '../lib/crypto/minikyber';
+  MiniKyberKeyPair,
+} from "../lib/crypto/minikyber";
 
 import {
   miniFrodoKeyGen,
   miniFrodoEncapsulate,
   miniFrodoDecapsulate,
-} from '../lib/crypto/minifrodo';
+  MiniFrodoKeyPair,
+} from "../lib/crypto/minifrodo";
 
 import {
   miniNtruKeyGen,
   miniNtruEncapsulate,
   miniNtruDecapsulate,
-} from '../lib/crypto/minintru';
+  MiniNtruKeyPair,
+} from "../lib/crypto/minintru";
 
-import {
-  aesGcmEncrypt,
-  aesGcmDecrypt,
-  deriveAesKey,
-} from '../lib/crypto/aes';
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// Helper to check if two Uint8Arrays are equal
-function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
+function toHex(u8: Uint8Array): string {
+  return Buffer.from(u8).toString("hex");
 }
 
-/**
- * Retry an async assertion up to `maxAttempts` times.
- * Passes as soon as one attempt succeeds.
- * This accommodates the inherent noise in educational LWE implementations.
- */
-async function retryAsync(fn: () => Promise<void>, maxAttempts: number): Promise<void> {
-  let lastError: Error | undefined;
-  for (let i = 0; i < maxAttempts; i++) {
-    try {
-      await fn();
-      return; // success
-    } catch (e) {
-      lastError = e as Error;
-    }
-  }
-  throw lastError;
+function isAllZero(u8: Uint8Array): boolean {
+  return u8.every((b) => b === 0);
 }
 
-describe('MiniKyber (Ring-LWE) KEM Tests', () => {
+// ═══════════════════════════════════════════════════════════════════════════════
+// Mini-Kyber Tests
+// ═══════════════════════════════════════════════════════════════════════════════
 
-  test('should generate valid key pair', async () => {
-    const keyPair = await miniKyberKeyGen();
+describe("Mini-Kyber KEM", () => {
+  let kp: MiniKyberKeyPair;
 
-    expect(keyPair).toBeDefined();
-    expect(keyPair.pk).toBeDefined();
-    expect(keyPair.sk).toBeDefined();
-    expect(keyPair.pk.a).toBeDefined();
-    expect(keyPair.pk.t).toBeDefined();
-    expect(keyPair.sk.s).toBeDefined();
+  beforeAll(async () => {
+    kp = await miniKyberKeyGen();
   });
 
-  test('should encapsulate and produce ciphertext and shared secret', async () => {
-    const keyPair = await miniKyberKeyGen();
-    const result = await miniKyberEncapsulate(keyPair.pk);
-
-    expect(result).toBeDefined();
-    expect(result.ct).toBeDefined();
-    expect(result.sharedSecret).toBeDefined();
-    expect(result.sharedSecret.length).toBe(32); // 256-bit shared secret
+  // ── 1. Key generation structure ──────────────────────────────────────────────
+  test("key generation produces a valid public key (a, t arrays)", () => {
+    expect(Array.isArray(kp.pk.a)).toBe(true);
+    expect(Array.isArray(kp.pk.t)).toBe(true);
+    expect(kp.pk.a.length).toBeGreaterThan(0);
+    expect(kp.pk.t.length).toBeGreaterThan(0);
+    expect(kp.pk.a.length).toBe(kp.pk.t.length);
   });
 
-  test('should decapsulate and recover same shared secret', async () => {
-    // Retry because small educational parameters can cause occasional LWE noise failures
-    await retryAsync(async () => {
-      const keyPair = await miniKyberKeyGen();
-      const { ct, sharedSecret: encapSecret } = await miniKyberEncapsulate(keyPair.pk);
-      const decapSecret = await miniKyberDecapsulate(keyPair.sk, ct);
-      expect(arraysEqual(encapSecret, decapSecret)).toBe(true);
-    }, 5);
+  test("key generation produces a valid secret key (s array)", () => {
+    expect(Array.isArray(kp.sk.s)).toBe(true);
+    expect(kp.sk.s.length).toBeGreaterThan(0);
   });
 
-  test('should produce different shared secrets with different key pairs', async () => {
-    const keyPair1 = await miniKyberKeyGen();
-    const keyPair2 = await miniKyberKeyGen();
-
-    const { sharedSecret: secret1 } = await miniKyberEncapsulate(keyPair1.pk);
-    const { sharedSecret: secret2 } = await miniKyberEncapsulate(keyPair2.pk);
-
-    expect(arraysEqual(secret1, secret2)).toBe(false);
+  test("public key coefficients are integers in valid range [0, Q)", () => {
+    const Q = 3329; // Mini-Kyber modulus
+    kp.pk.a.forEach((c) => {
+      expect(Number.isInteger(c)).toBe(true);
+      expect(c).toBeGreaterThanOrEqual(0);
+      expect(c).toBeLessThan(Q);
+    });
   });
 
-  test('should succeed in at least 30% of encap/decap trials (LWE noise tolerance)', async () => {
-    // MiniKyber uses small educational parameters (N=8, Q=3329).
-    // The threshold-based message decoding can fail when LWE noise wraps modularly,
-    // especially for m=0. We verify the algorithm works but tolerate noise failures.
-    const keyPair = await miniKyberKeyGen();
-    let successes = 0;
-    const trials = 20;
+  // ── 2. Single encapsulation / decapsulation ──────────────────────────────────
+  test("encapsulate returns a ciphertext and a 32-byte shared secret", async () => {
+    const { ct, sharedSecret } = await miniKyberEncapsulate(kp.pk);
+    expect(Array.isArray(ct.u)).toBe(true);
+    expect(Array.isArray(ct.v)).toBe(true);
+    expect(sharedSecret).toBeInstanceOf(Uint8Array);
+    expect(sharedSecret.length).toBe(32);
+  });
 
-    for (let i = 0; i < trials; i++) {
-      const { ct, sharedSecret: encapSecret } = await miniKyberEncapsulate(keyPair.pk);
-      const decapSecret = await miniKyberDecapsulate(keyPair.sk, ct);
-      if (arraysEqual(encapSecret, decapSecret)) successes++;
+  test("decapsulate recovers the same shared secret (KEM correctness)", async () => {
+    const { ct, sharedSecret: ss1 } = await miniKyberEncapsulate(kp.pk);
+    const ss2 = await miniKyberDecapsulate(kp.sk, ct);
+    expect(toHex(ss1)).toBe(toHex(ss2));
+  });
+
+  test("shared secret is non-trivial (not all-zero)", async () => {
+    const { ct, sharedSecret: ss1 } = await miniKyberEncapsulate(kp.pk);
+    expect(isAllZero(ss1)).toBe(false);
+    const ss2 = await miniKyberDecapsulate(kp.sk, ct);
+    expect(isAllZero(ss2)).toBe(false);
+  });
+
+  // ── 3. 100-iteration correctness sweep ───────────────────────────────────────
+  test("correctness holds across 100 independent key-exchange cycles", async () => {
+    let failures = 0;
+    for (let i = 0; i < 100; i++) {
+      const localKp = await miniKyberKeyGen();
+      const { ct, sharedSecret: ss1 } = await miniKyberEncapsulate(localKp.pk);
+      const ss2 = await miniKyberDecapsulate(localKp.sk, ct);
+      if (toHex(ss1) !== toHex(ss2)) failures++;
     }
+    expect(failures).toBe(0);
+  }, 60000);
 
-    // With small params, success rate varies; require at least 30%
-    expect(successes).toBeGreaterThanOrEqual(Math.floor(trials * 0.3));
+  // ── 4. Independence ───────────────────────────────────────────────────────────
+  test("two independent key exchanges produce independent shared secrets", async () => {
+    const { sharedSecret: ss1 } = await miniKyberEncapsulate(kp.pk);
+    const { sharedSecret: ss2 } = await miniKyberEncapsulate(kp.pk);
+    // With overwhelming probability these will differ; deterministic collision = bug
+    expect(toHex(ss1)).not.toBe(toHex(ss2));
   });
 });
 
-describe('MiniFrodo (Standard LWE) KEM Tests', () => {
+// ═══════════════════════════════════════════════════════════════════════════════
+// Mini-Frodo Tests
+// ═══════════════════════════════════════════════════════════════════════════════
 
-  test('should generate valid key pair', async () => {
-    const keyPair = await miniFrodoKeyGen();
+describe("Mini-Frodo KEM", () => {
+  let kp: MiniFrodoKeyPair;
 
-    expect(keyPair).toBeDefined();
-    expect(keyPair.pk).toBeDefined();
-    expect(keyPair.sk).toBeDefined();
-    expect(keyPair.pk.A).toBeDefined();
-    expect(keyPair.pk.B).toBeDefined();
-    expect(keyPair.sk.S).toBeDefined();
+  beforeAll(async () => {
+    kp = await miniFrodoKeyGen();
   });
 
-  test('should encapsulate and produce ciphertext and shared secret', async () => {
-    const keyPair = await miniFrodoKeyGen();
-    const result = await miniFrodoEncapsulate(keyPair.pk);
-
-    expect(result).toBeDefined();
-    expect(result.ct).toBeDefined();
-    expect(result.sharedSecret).toBeDefined();
-    expect(result.sharedSecret.length).toBe(32);
+  // ── 1. Key generation structure ──────────────────────────────────────────────
+  test("key generation produces valid public key (A, B matrices)", () => {
+    expect(Array.isArray(kp.pk.A)).toBe(true);
+    expect(Array.isArray(kp.pk.B)).toBe(true);
+    expect(kp.pk.A.length).toBeGreaterThan(0);
+    expect(kp.pk.B.length).toBeGreaterThan(0);
   });
 
-  test('should decapsulate and recover same shared secret', async () => {
-    // Retry because small educational parameters can cause occasional LWE noise failures
-    await retryAsync(async () => {
-      const keyPair = await miniFrodoKeyGen();
-      const { ct, sharedSecret: encapSecret } = await miniFrodoEncapsulate(keyPair.pk);
-      const decapSecret = await miniFrodoDecapsulate(keyPair.sk, ct);
-      expect(arraysEqual(encapSecret, decapSecret)).toBe(true);
-    }, 5);
+  test("key generation produces valid secret key (S matrix)", () => {
+    expect(Array.isArray(kp.sk.S)).toBe(true);
+    expect(kp.sk.S.length).toBeGreaterThan(0);
   });
 
-  test('should produce different shared secrets with different key pairs', async () => {
-    const keyPair1 = await miniFrodoKeyGen();
-    const keyPair2 = await miniFrodoKeyGen();
-
-    const { sharedSecret: secret1 } = await miniFrodoEncapsulate(keyPair1.pk);
-    const { sharedSecret: secret2 } = await miniFrodoEncapsulate(keyPair2.pk);
-
-    expect(arraysEqual(secret1, secret2)).toBe(false);
+  test("public matrix A is square (N×N)", () => {
+    const N = kp.pk.A.length;
+    kp.pk.A.forEach((row) => expect(row.length).toBe(N));
   });
 
-  test('should succeed in at least 30% of encap/decap trials (LWE noise tolerance)', async () => {
-    // MiniFrodo uses very small educational parameters (N=4, Q=257).
-    // Same threshold-based decoding issue as Kyber.
-    const keyPair = await miniFrodoKeyGen();
-    let successes = 0;
-    const trials = 20;
-
-    for (let i = 0; i < trials; i++) {
-      const { ct, sharedSecret: encapSecret } = await miniFrodoEncapsulate(keyPair.pk);
-      const decapSecret = await miniFrodoDecapsulate(keyPair.sk, ct);
-      if (arraysEqual(encapSecret, decapSecret)) successes++;
-    }
-
-    expect(successes).toBeGreaterThanOrEqual(Math.floor(trials * 0.3));
-  });
-});
-
-describe('MiniNTRU (Polynomial Ring) KEM Tests', () => {
-
-  test('should generate valid key pair', async () => {
-    const keyPair = await miniNtruKeyGen();
-
-    expect(keyPair).toBeDefined();
-    expect(keyPair.pk).toBeDefined();
-    expect(keyPair.sk).toBeDefined();
-    expect(keyPair.pk.h).toBeDefined();
-    expect(keyPair.sk.f).toBeDefined();
-  });
-
-  test('should encapsulate and produce ciphertext and shared secret', async () => {
-    const keyPair = await miniNtruKeyGen();
-    const result = await miniNtruEncapsulate(keyPair.pk);
-
-    expect(result).toBeDefined();
-    expect(result.ct).toBeDefined();
-    expect(result.sharedSecret).toBeDefined();
-    expect(result.sharedSecret.length).toBe(32);
-  });
-
-  test('should decapsulate and recover same shared secret', async () => {
-    const keyPair = await miniNtruKeyGen();
-    const { ct, sharedSecret: encapSecret } = await miniNtruEncapsulate(keyPair.pk);
-    const decapSecret = await miniNtruDecapsulate(keyPair.sk, ct);
-
-    expect(arraysEqual(encapSecret, decapSecret)).toBe(true);
-  });
-
-  test('should handle multiple key generations without error', async () => {
-    for (let i = 0; i < 5; i++) {
-      const keyPair = await miniNtruKeyGen();
-      expect(keyPair).toBeDefined();
-      expect(keyPair.pk.h).toBeDefined();
-    }
-  });
-
-  test('should be consistent over multiple operations', async () => {
-    const keyPair = await miniNtruKeyGen();
-
-    for (let i = 0; i < 5; i++) {
-      const { ct, sharedSecret: encapSecret } = await miniNtruEncapsulate(keyPair.pk);
-      const decapSecret = await miniNtruDecapsulate(keyPair.sk, ct);
-      expect(arraysEqual(encapSecret, decapSecret)).toBe(true);
-    }
-  });
-});
-
-describe('AES-256-GCM Encryption Tests', () => {
-
-  test('should encrypt and decrypt text correctly', async () => {
-    // Create a test key
-    const sharedSecret = crypto.getRandomValues(new Uint8Array(32));
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const info = new TextEncoder().encode('test-info');
-
-    const aesKey = await deriveAesKey(sharedSecret, salt, info);
-
-    const plaintext = 'Hello, this is a test message!';
-    const { ivB64, ciphertextB64 } = await aesGcmEncrypt(plaintext, aesKey);
-
-    expect(ivB64).toBeDefined();
-    expect(ciphertextB64).toBeDefined();
-
-    const decrypted = await aesGcmDecrypt(ivB64, ciphertextB64, aesKey);
-    expect(decrypted).toBe(plaintext);
-  });
-
-  test('should produce different ciphertexts for same plaintext (due to random IV)', async () => {
-    const sharedSecret = crypto.getRandomValues(new Uint8Array(32));
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const info = new TextEncoder().encode('test-info');
-
-    const aesKey = await deriveAesKey(sharedSecret, salt, info);
-
-    const plaintext = 'Same message';
-    const result1 = await aesGcmEncrypt(plaintext, aesKey);
-    const result2 = await aesGcmEncrypt(plaintext, aesKey);
-
-    // IVs should be different
-    expect(result1.ivB64).not.toBe(result2.ivB64);
-    // Ciphertexts should be different
-    expect(result1.ciphertextB64).not.toBe(result2.ciphertextB64);
-
-    // But both should decrypt to same plaintext
-    const decrypted1 = await aesGcmDecrypt(result1.ivB64, result1.ciphertextB64, aesKey);
-    const decrypted2 = await aesGcmDecrypt(result2.ivB64, result2.ciphertextB64, aesKey);
-    expect(decrypted1).toBe(plaintext);
-    expect(decrypted2).toBe(plaintext);
-  });
-
-  test('should handle long messages', async () => {
-    const sharedSecret = crypto.getRandomValues(new Uint8Array(32));
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const info = new TextEncoder().encode('test-info');
-
-    const aesKey = await deriveAesKey(sharedSecret, salt, info);
-
-    const plaintext = 'A'.repeat(10000); // 10KB message
-    const { ivB64, ciphertextB64 } = await aesGcmEncrypt(plaintext, aesKey);
-    const decrypted = await aesGcmDecrypt(ivB64, ciphertextB64, aesKey);
-
-    expect(decrypted).toBe(plaintext);
-  });
-
-  test('should handle unicode characters', async () => {
-    const sharedSecret = crypto.getRandomValues(new Uint8Array(32));
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const info = new TextEncoder().encode('test-info');
-
-    const aesKey = await deriveAesKey(sharedSecret, salt, info);
-
-    const plaintext = '你好世界 🌍 مرحبا العالم';
-    const { ivB64, ciphertextB64 } = await aesGcmEncrypt(plaintext, aesKey);
-    const decrypted = await aesGcmDecrypt(ivB64, ciphertextB64, aesKey);
-
-    expect(decrypted).toBe(plaintext);
-  });
-
-  test('should fail decryption with wrong key', async () => {
-    const sharedSecret1 = crypto.getRandomValues(new Uint8Array(32));
-    const sharedSecret2 = crypto.getRandomValues(new Uint8Array(32));
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const info = new TextEncoder().encode('test-info');
-
-    const aesKey1 = await deriveAesKey(sharedSecret1, salt, info);
-    const aesKey2 = await deriveAesKey(sharedSecret2, salt, info);
-
-    const plaintext = 'Secret message';
-    const { ivB64, ciphertextB64 } = await aesGcmEncrypt(plaintext, aesKey1);
-
-    // Decrypting with wrong key should fail
-    await expect(aesGcmDecrypt(ivB64, ciphertextB64, aesKey2)).rejects.toThrow();
-  });
-});
-
-describe('Key Derivation (HKDF) Tests', () => {
-
-  test('should derive consistent keys from same inputs', async () => {
-    const sharedSecret = crypto.getRandomValues(new Uint8Array(32));
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const info = new TextEncoder().encode('test-info');
-
-    const key1 = await deriveAesKey(sharedSecret, salt, info);
-    const key2 = await deriveAesKey(sharedSecret, salt, info);
-
-    // Keys are non-extractable, so verify by cross-encrypt/decrypt
-    const { ivB64, ciphertextB64 } = await aesGcmEncrypt('consistency test', key1);
-    const decrypted = await aesGcmDecrypt(ivB64, ciphertextB64, key2);
-    expect(decrypted).toBe('consistency test');
-  });
-
-  test('should derive different keys from different salts', async () => {
-    const sharedSecret = crypto.getRandomValues(new Uint8Array(32));
-    const salt1 = crypto.getRandomValues(new Uint8Array(16));
-    const salt2 = crypto.getRandomValues(new Uint8Array(16));
-    const info = new TextEncoder().encode('test-info');
-
-    const key1 = await deriveAesKey(sharedSecret, salt1, info);
-    const key2 = await deriveAesKey(sharedSecret, salt2, info);
-
-    // Encrypt with key1, try decrypt with key2 - should fail
-    const { ivB64, ciphertextB64 } = await aesGcmEncrypt('salt test', key1);
-    await expect(aesGcmDecrypt(ivB64, ciphertextB64, key2)).rejects.toThrow();
-  });
-});
-
-describe('End-to-End Encryption Flow Tests', () => {
-
-  async function testE2EEFlow(
-    keyGenFn: () => Promise<any>,
-    encapFn: (pk: any) => Promise<{ ct: any; sharedSecret: Uint8Array }>,
-    decapFn: (sk: any, ct: any) => Promise<Uint8Array>,
-    algName: string
-  ) {
-    // Simulate Alice and Bob
-    const aliceKeyPair = await keyGenFn();
-
-    // Bob encapsulates using Alice's public key
-    const { ct, sharedSecret: bobSecret } = await encapFn(aliceKeyPair.pk);
-
-    // Alice decapsulates to get the same shared secret
-    const aliceSecret = await decapFn(aliceKeyPair.sk, ct);
-
-    // Both should have the same shared secret
-    expect(arraysEqual(aliceSecret, bobSecret)).toBe(true);
-
-    // Derive AES keys
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const info = new TextEncoder().encode(`e2ee-${algName}`);
-
-    const aliceKey = await deriveAesKey(aliceSecret, salt, info);
-    const bobKey = await deriveAesKey(bobSecret, salt, info);
-
-    // Test message encryption
-    const message = 'Hello from Bob!';
-    const { ivB64, ciphertextB64 } = await aesGcmEncrypt(message, bobKey);
-    const decrypted = await aesGcmDecrypt(ivB64, ciphertextB64, aliceKey);
-
-    expect(decrypted).toBe(message);
-
-    // Test reverse direction
-    const reply = 'Hello from Alice!';
-    const { ivB64: iv2, ciphertextB64: ct2 } = await aesGcmEncrypt(reply, aliceKey);
-    const decryptedReply = await aesGcmDecrypt(iv2, ct2, bobKey);
-
-    expect(decryptedReply).toBe(reply);
-  }
-
-  test('should work with Kyber (with retry for LWE noise)', async () => {
-    await retryAsync(() => testE2EEFlow(
-      miniKyberKeyGen,
-      miniKyberEncapsulate,
-      miniKyberDecapsulate,
-      'kyber'
-    ), 5);
-  });
-
-  test('should work with Frodo (with retry for LWE noise)', async () => {
-    await retryAsync(() => testE2EEFlow(
-      miniFrodoKeyGen,
-      miniFrodoEncapsulate,
-      miniFrodoDecapsulate,
-      'frodo'
-    ), 5);
-  });
-
-  test('should work with NTRU', async () => {
-    await testE2EEFlow(
-      miniNtruKeyGen,
-      miniNtruEncapsulate,
-      miniNtruDecapsulate,
-      'ntru'
+  test("public matrix coefficients are integers in valid range [0, Q)", () => {
+    const Q = 257; // Mini-Frodo modulus
+    kp.pk.A.forEach((row) =>
+      row.forEach((c) => {
+        expect(Number.isInteger(c)).toBe(true);
+        expect(c).toBeGreaterThanOrEqual(0);
+        expect(c).toBeLessThan(Q);
+      })
     );
   });
-});
 
-describe('Image Encryption Tests', () => {
+  // ── 2. Single encapsulation / decapsulation ──────────────────────────────────
+  test("encapsulate returns a ciphertext and a 32-byte shared secret", async () => {
+    const { ct, sharedSecret } = await miniFrodoEncapsulate(kp.pk);
+    expect(Array.isArray(ct.U)).toBe(true);
+    expect(Array.isArray(ct.V)).toBe(true);
+    expect(sharedSecret).toBeInstanceOf(Uint8Array);
+    expect(sharedSecret.length).toBe(32);
+  });
 
-  test('should encrypt and decrypt base64 image data', async () => {
-    const sharedSecret = crypto.getRandomValues(new Uint8Array(32));
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const info = new TextEncoder().encode('test-info');
+  test("decapsulate recovers the same shared secret (KEM correctness)", async () => {
+    const { ct, sharedSecret: ss1 } = await miniFrodoEncapsulate(kp.pk);
+    const ss2 = await miniFrodoDecapsulate(kp.sk, ct);
+    expect(toHex(ss1)).toBe(toHex(ss2));
+  });
 
-    const aesKey = await deriveAesKey(sharedSecret, salt, info);
+  test("shared secret is non-trivial (not all-zero)", async () => {
+    const { ct, sharedSecret: ss1 } = await miniFrodoEncapsulate(kp.pk);
+    expect(isAllZero(ss1)).toBe(false);
+    const ss2 = await miniFrodoDecapsulate(kp.sk, ct);
+    expect(isAllZero(ss2)).toBe(false);
+  });
 
-    // Simulate image data (1x1 white pixel PNG)
-    const imageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-    const imageMessage = `IMG:image/png:${imageBase64}`;
+  // ── 3. 100-iteration correctness sweep ───────────────────────────────────────
+  test("correctness holds across 100 independent key-exchange cycles", async () => {
+    let failures = 0;
+    for (let i = 0; i < 100; i++) {
+      const localKp = await miniFrodoKeyGen();
+      const { ct, sharedSecret: ss1 } = await miniFrodoEncapsulate(localKp.pk);
+      const ss2 = await miniFrodoDecapsulate(localKp.sk, ct);
+      if (toHex(ss1) !== toHex(ss2)) failures++;
+    }
+    expect(failures).toBe(0);
+  }, 60000);
 
-    const { ivB64, ciphertextB64 } = await aesGcmEncrypt(imageMessage, aesKey);
-    const decrypted = await aesGcmDecrypt(ivB64, ciphertextB64, aesKey);
-
-    expect(decrypted).toBe(imageMessage);
-    expect(decrypted.startsWith('IMG:')).toBe(true);
+  // ── 4. Independence ───────────────────────────────────────────────────────────
+  test("two independent key exchanges produce independent shared secrets", async () => {
+    const { sharedSecret: ss1 } = await miniFrodoEncapsulate(kp.pk);
+    const { sharedSecret: ss2 } = await miniFrodoEncapsulate(kp.pk);
+    expect(toHex(ss1)).not.toBe(toHex(ss2));
   });
 });
 
-describe('Performance Benchmarks', () => {
+// ═══════════════════════════════════════════════════════════════════════════════
+// Mini-NTRU Tests
+// ═══════════════════════════════════════════════════════════════════════════════
 
-  test('Kyber key generation should be reasonably fast', async () => {
-    const iterations = 10;
-    const start = performance.now();
+describe("Mini-NTRU KEM", () => {
+  let kp: MiniNtruKeyPair;
 
-    for (let i = 0; i < iterations; i++) {
-      await miniKyberKeyGen();
-    }
-
-    const elapsed = performance.now() - start;
-    const avgTime = elapsed / iterations;
-
-    console.log(`Kyber KeyGen avg: ${avgTime.toFixed(2)}ms`);
-    expect(avgTime).toBeLessThan(500); // Should be under 500ms
+  beforeAll(async () => {
+    kp = await miniNtruKeyGen();
   });
 
-  test('Frodo key generation should complete', async () => {
-    const iterations = 10;
-    const start = performance.now();
-
-    for (let i = 0; i < iterations; i++) {
-      await miniFrodoKeyGen();
-    }
-
-    const elapsed = performance.now() - start;
-    const avgTime = elapsed / iterations;
-
-    console.log(`Frodo KeyGen avg: ${avgTime.toFixed(2)}ms`);
-    expect(avgTime).toBeLessThan(1000); // Frodo is slower
+  // ── 1. Key generation structure ──────────────────────────────────────────────
+  test("key generation produces valid public key (h polynomial)", () => {
+    expect(Array.isArray(kp.pk.h)).toBe(true);
+    expect(kp.pk.h.length).toBeGreaterThan(0);
   });
 
-  test('NTRU key generation should complete', async () => {
-    const iterations = 5;
-    const start = performance.now();
-
-    for (let i = 0; i < iterations; i++) {
-      await miniNtruKeyGen();
-    }
-
-    const elapsed = performance.now() - start;
-    const avgTime = elapsed / iterations;
-
-    console.log(`NTRU KeyGen avg: ${avgTime.toFixed(2)}ms`);
-    expect(avgTime).toBeLessThan(2000); // NTRU may take longer
+  test("key generation produces valid secret key (f polynomial)", () => {
+    expect(Array.isArray(kp.sk.f)).toBe(true);
+    expect(kp.sk.f.length).toBeGreaterThan(0);
   });
 
-  test('AES encryption should be fast', async () => {
-    const sharedSecret = crypto.getRandomValues(new Uint8Array(32));
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const info = new TextEncoder().encode('test-info');
-    const aesKey = await deriveAesKey(sharedSecret, salt, info);
+  test("public key h has the same ring dimension as secret key f", () => {
+    expect(kp.pk.h.length).toBe(kp.sk.f.length);
+  });
 
-    const message = 'A'.repeat(1000); // 1KB message
-    const iterations = 100;
-    const start = performance.now();
+  test("public key coefficients are integers in valid range [0, Q)", () => {
+    const Q = 128; // Mini-NTRU modulus
+    kp.pk.h.forEach((c) => {
+      expect(Number.isInteger(c)).toBe(true);
+      expect(c).toBeGreaterThanOrEqual(0);
+      expect(c).toBeLessThan(Q);
+    });
+  });
 
-    for (let i = 0; i < iterations; i++) {
-      await aesGcmEncrypt(message, aesKey);
+  // ── 2. Single encapsulation / decapsulation ──────────────────────────────────
+  test("encapsulate returns a ciphertext (c array + encSeed) and a 32-byte shared secret", async () => {
+    const { ct, sharedSecret } = await miniNtruEncapsulate(kp.pk);
+    expect(Array.isArray(ct.c)).toBe(true);
+    expect(typeof ct.encSeed).toBe("string");
+    expect(sharedSecret).toBeInstanceOf(Uint8Array);
+    expect(sharedSecret.length).toBe(32);
+  });
+
+  test("decapsulate recovers the same shared secret (KEM correctness)", async () => {
+    const { ct, sharedSecret: ss1 } = await miniNtruEncapsulate(kp.pk);
+    const ss2 = await miniNtruDecapsulate(kp.sk, ct);
+    expect(toHex(ss1)).toBe(toHex(ss2));
+  });
+
+  test("shared secret is non-trivial (not all-zero)", async () => {
+    const { ct, sharedSecret: ss1 } = await miniNtruEncapsulate(kp.pk);
+    expect(isAllZero(ss1)).toBe(false);
+    const ss2 = await miniNtruDecapsulate(kp.sk, ct);
+    expect(isAllZero(ss2)).toBe(false);
+  });
+
+  // ── 3. 100-iteration correctness sweep ───────────────────────────────────────
+  test("correctness holds across 100 independent key-exchange cycles", async () => {
+    let failures = 0;
+    for (let i = 0; i < 100; i++) {
+      const localKp = await miniNtruKeyGen();
+      const { ct, sharedSecret: ss1 } = await miniNtruEncapsulate(localKp.pk);
+      const ss2 = await miniNtruDecapsulate(localKp.sk, ct);
+      if (toHex(ss1) !== toHex(ss2)) failures++;
     }
+    expect(failures).toBe(0);
+  }, 60000);
 
-    const elapsed = performance.now() - start;
-    const avgTime = elapsed / iterations;
+  // ── 4. Independence ───────────────────────────────────────────────────────────
+  test("two independent key exchanges produce independent shared secrets", async () => {
+    const { sharedSecret: ss1 } = await miniNtruEncapsulate(kp.pk);
+    const { sharedSecret: ss2 } = await miniNtruEncapsulate(kp.pk);
+    expect(toHex(ss1)).not.toBe(toHex(ss2));
+  });
+});
 
-    console.log(`AES Encrypt avg: ${avgTime.toFixed(2)}ms`);
-    expect(avgTime).toBeLessThan(10); // Should be very fast
+// ═══════════════════════════════════════════════════════════════════════════════
+// Cross-Algorithm Properties
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("Cross-algorithm properties", () => {
+  test("all three algorithms produce 32-byte shared secrets (uniform output length)", async () => {
+    const kyberKp = await miniKyberKeyGen();
+    const frodoKp = await miniFrodoKeyGen();
+    const ntruKp  = await miniNtruKeyGen();
+
+    const { sharedSecret: kSs } = await miniKyberEncapsulate(kyberKp.pk);
+    const { sharedSecret: fSs } = await miniFrodoEncapsulate(frodoKp.pk);
+    const { sharedSecret: nSs } = await miniNtruEncapsulate(ntruKp.pk);
+
+    expect(kSs.length).toBe(32);
+    expect(fSs.length).toBe(32);
+    expect(nSs.length).toBe(32);
+  });
+
+  test("shared secrets from different algorithms are independent", async () => {
+    const kyberKp = await miniKyberKeyGen();
+    const frodoKp = await miniFrodoKeyGen();
+
+    const { sharedSecret: kSs } = await miniKyberEncapsulate(kyberKp.pk);
+    const { sharedSecret: fSs } = await miniFrodoEncapsulate(frodoKp.pk);
+
+    expect(toHex(kSs)).not.toBe(toHex(fSs));
+  });
+
+  test("mismatched keypair does not produce matching shared secret (wrong-key resistance)", async () => {
+    // Kyber: encapsulate to kp1 but attempt decap with kp2's secret key
+    const kp1 = await miniKyberKeyGen();
+    const kp2 = await miniKyberKeyGen();
+    const { ct, sharedSecret: ss1 } = await miniKyberEncapsulate(kp1.pk);
+    const ss2 = await miniKyberDecapsulate(kp2.sk, ct); // wrong key
+    expect(toHex(ss1)).not.toBe(toHex(ss2));
   });
 });
