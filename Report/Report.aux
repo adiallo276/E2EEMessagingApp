@@ -3,55 +3,78 @@
 \providecommand\HyField@AuxAddToFields[1]{}
 \providecommand\HyField@AuxAddToCoFields[2]{}
 \citation{shor1994}
-\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}The Quantum Computing Threat}{1}{subsection.1.1}\protected@file@percent }
 \citation{nist2024}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Theoretical Background}{1}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}NIST Standardisation and Algorithm Selection}{1}{subsection.2.1}\protected@file@percent }
 \citation{regev2005}
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Project Objectives}{2}{subsection.1.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {2}Theoretical Background}{2}{section.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Post-Quantum Cryptography Overview}{2}{subsection.2.1}\protected@file@percent }
 \citation{lyubashevsky2010}
 \citation{hoffstein1998}
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}The Learning With Errors Problem}{3}{subsection.2.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Ring-LWE and Structured Lattices}{3}{subsection.2.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}NTRU Lattices}{3}{subsection.2.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.5}Key Encapsulation Mechanisms}{3}{subsection.2.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3}Methodology and Project Evolution}{4}{section.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Initial Approach and Challenges}{4}{subsection.3.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Strategic Pivot}{4}{subsection.3.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Parameter Comparison: Production vs Mini Implementations}}{4}{table.caption.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Architecture Evolution}{4}{subsection.3.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Supervisor Guidance and User Feedback}{5}{subsection.3.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4}System Implementation}{5}{section.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Technology Stack}{5}{subsection.4.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}System Architecture}{5}{subsection.4.2}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces System Architecture with E2EE Security Boundary}}{5}{figure.caption.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Cryptographic Library}{5}{subsection.4.3}\protected@file@percent }
-\@writefile{lol}{\contentsline {lstlisting}{\numberline {1}{\ignorespaces Unified KEM Interface}}{6}{lstlisting.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}E2EE Protocol Design}{6}{subsection.4.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {5}Evaluation and Results}{7}{section.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Benchmarking Methodology}{7}{subsection.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}KEM Operation Performance}{7}{subsection.5.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces KEM Operation Performance (5,000 iterations)}}{7}{table.caption.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Learning With Errors}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}NTRU and KEMs}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Methodology and Project Evolution}{2}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Initial Constraints and Design Decisions}{2}{subsection.3.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Parameter Comparison: Production vs Mini}}{2}{table.caption.1}\protected@file@percent }
 \providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
-\newlabel{tab:kem-results}{{2}{7}{KEM Operation Performance (5,000 iterations)}{table.caption.3}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Key and Ciphertext Sizes}}{7}{table.caption.4}\protected@file@percent }
-\newlabel{tab:sizes}{{3}{7}{Key and Ciphertext Sizes}{table.caption.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Session Throughput Analysis}{8}{subsection.5.3}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Session Throughput (500 sessions $\times $ 100 msgs $\times $ 500KB)}}{8}{table.caption.5}\protected@file@percent }
-\newlabel{tab:throughput}{{4}{8}{Session Throughput (500 sessions $\times $ 100 msgs $\times $ 500KB)}{table.caption.5}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces PQC Overhead vs Traditional ECDH}}{8}{table.caption.6}\protected@file@percent }
-\newlabel{tab:overhead}{{5}{8}{PQC Overhead vs Traditional ECDH}{table.caption.6}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Analysis and Interpretation}{8}{subsection.5.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Limitations}{9}{subsection.5.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6}Critical Evaluation}{9}{section.6}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Achievement of Objectives}{9}{subsection.6.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Lessons Learned}{9}{subsection.6.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Future Work}{9}{subsection.6.3}\protected@file@percent }
+\newlabel{tab:params}{{1}{2}{Parameter Comparison: Production vs Mini}{table.caption.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Architecture Evolution}{2}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Supervisor Guidance}{3}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}System Implementation}{3}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Technology Stack and Architecture}{3}{subsection.4.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces System Architecture with E2EE Security Boundary}}{3}{figure.caption.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Cryptographic Library and E2EE Protocol}{3}{subsection.4.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces E2EE Three-Message Handshake Protocol. $K_I = K_R = K$ after correct decapsulation; both parties independently derive the same $K_{\text  {session}}$ via HKDF.}}{4}{figure.caption.3}\protected@file@percent }
+\newlabel{fig:handshake}{{2}{4}{E2EE Three-Message Handshake Protocol. $K_I = K_R = K$ after correct decapsulation; both parties independently derive the same $K_{\text {session}}$ via HKDF}{figure.caption.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Implementation Bugs Identified and Fixed}{4}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Evaluation and Results}{5}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Benchmarking Methodology}{5}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}KEM Operation Performance}{5}{subsection.5.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces KEM Operations (5,000 invocations, $n_{\text  {eff}}=500$, Apple M2, Safari). Mean~$\pm \,\sigma $ / [95\% CI] in $\mu $s.}}{5}{table.caption.4}\protected@file@percent }
+\newlabel{tab:kem-results}{{2}{5}{KEM Operations (5,000 invocations, $n_{\text {eff}}=500$, Apple M2, Safari). Mean~$\pm \,\sigma $ / [95\% CI] in $\mu $s}{table.caption.4}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Key and Ciphertext Sizes}}{5}{table.caption.5}\protected@file@percent }
+\newlabel{tab:sizes}{{3}{5}{Key and Ciphertext Sizes}{table.caption.5}{}}
+\citation{pqm4}
+\citation{pqm4}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Session Throughput}{6}{subsection.5.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Session Throughput (500 sessions $\times $ 100 msgs $\times $ 500\,KB). Total: mean\,$\pm \,\sigma $ [95\% CI] in ms.}}{6}{table.caption.6}\protected@file@percent }
+\newlabel{tab:throughput}{{4}{6}{Session Throughput (500 sessions $\times $ 100 msgs $\times $ 500\,KB). Total: mean\,$\pm \,\sigma $ [95\% CI] in ms}{table.caption.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Statistical Significance}{6}{subsection.5.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Welch's $t$-test Results ($n=500$ per group, $\alpha =0.05$, threshold $|t|>1.96$)}}{6}{table.caption.7}\protected@file@percent }
+\newlabel{tab:ttests}{{5}{6}{Welch's $t$-test Results ($n=500$ per group, $\alpha =0.05$, threshold $|t|>1.96$)}{table.caption.7}{}}
+\citation{nist2024}
+\citation{pqm4}
+\citation{nist2024}
+\citation{pqm4}
+\citation{noble_pq}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Contextualisation Against Production Benchmarks}{7}{subsection.5.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Mini Results vs.\ pqm4 Production Reference \cite  {pqm4}}}{7}{table.caption.8}\protected@file@percent }
+\newlabel{tab:nist-comparison}{{6}{7}{Mini Results vs.\ pqm4 Production Reference \cite {pqm4}}{table.caption.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.6}Ranking Comparison}{7}{subsection.5.6}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Performance Rankings: This Work vs.\ Literature \cite  {nist2024,pqm4}}}{7}{table.caption.9}\protected@file@percent }
+\newlabel{tab:ranking-comparison}{{7}{7}{Performance Rankings: This Work vs.\ Literature \cite {nist2024,pqm4}}{table.caption.9}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.7}Threats to Validity}{7}{subsection.5.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Critical Evaluation}{8}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Achievement of Objectives}{8}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Automated Testing}{8}{subsection.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Security Analysis}{8}{subsection.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Lessons Learned}{8}{subsection.6.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.5}Recommendations for Practitioners}{8}{subsection.6.5}\protected@file@percent }
+\citation{tls13}
 \bibcite{shor1994}{1}
-\bibcite{nist2024}{2}
-\bibcite{regev2005}{3}
-\bibcite{lyubashevsky2010}{4}
-\bibcite{hoffstein1998}{5}
-\@writefile{toc}{\contentsline {section}{\numberline {7}Conclusion}{10}{section.7}\protected@file@percent }
+\bibcite{regev2005}{2}
+\bibcite{lyubashevsky2010}{3}
+\bibcite{hoffstein1998}{4}
+\bibcite{nist2024}{5}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.6}Future Work}{9}{subsection.6.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Conclusion}{9}{section.7}\protected@file@percent }
+\bibcite{crystals_kyber_spec}{6}
+\bibcite{frodokem_spec}{7}
+\bibcite{pqm4}{8}
+\bibcite{noble_pq}{9}
+\bibcite{peikert2016}{10}
+\bibcite{bernstein2017}{11}
+\bibcite{signal_pqxdh}{12}
+\bibcite{tls13}{13}
+\bibcite{nist_migration}{14}
+\bibcite{webcrypto}{15}
 \gdef \@abspage@last{10}

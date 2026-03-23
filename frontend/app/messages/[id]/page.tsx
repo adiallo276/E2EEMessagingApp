@@ -170,6 +170,10 @@ export default function MessagesPage() {
   const [contextMenuMessageId, setContextMenuMessageId] = useState<number | null>(null);
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  // Edit & delete state
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState<string>("");
+
   // Typing & read receipts
   const [otherUserTyping, setOtherUserTyping] = useState<boolean>(false);
   const [lastReadMessageId, setLastReadMessageId] = useState<number | null>(null);
@@ -210,6 +214,7 @@ export default function MessagesPage() {
 
   function formatLastMessage(msg: any, myUsername: string): string {
     const prefix = msg.senderUsername === myUsername ? "You: " : "";
+    if (msg.deleted) return prefix + "This message was deleted";
     if (msg.content) {
       try {
         const env = JSON.parse(msg.content);
@@ -486,11 +491,22 @@ export default function MessagesPage() {
           setOtherUserTyping(false);
         }
 
-        // Add message to list
-        rawMessagesRef.current = [...rawMessagesRef.current, incoming];
-        const decorated = await decorateMessage(incoming, hasSession(conversationId));
-        setMessages(prev => [...prev, decorated]);
-        updateSidebarLastMessage(incoming);
+        // Check if this is an update to an existing message (edit/delete)
+        const existingIndex = rawMessagesRef.current.findIndex(m => m.id === incoming.id);
+        if (existingIndex !== -1) {
+          rawMessagesRef.current = rawMessagesRef.current.map(m =>
+            m.id === incoming.id ? incoming : m
+          );
+          const decorated = await decorateMessage(incoming, hasSession(conversationId));
+          setMessages(prev => prev.map(m => m.id === incoming.id ? decorated : m));
+          updateSidebarLastMessage(incoming);
+        } else {
+          // New message
+          rawMessagesRef.current = [...rawMessagesRef.current, incoming];
+          const decorated = await decorateMessage(incoming, hasSession(conversationId));
+          setMessages(prev => [...prev, decorated]);
+          updateSidebarLastMessage(incoming);
+        }
 
         // Send read receipt
         if (incoming.senderUsername !== myUsername) {
@@ -662,6 +678,69 @@ export default function MessagesPage() {
     if (!content.trim()) return;
     await sendMessage(content);
     setContent("");
+  }
+
+  function startEditing(m: ViewMessage) {
+    setEditingMessageId(m.id);
+    setEditContent(m.displayContent);
+  }
+
+  function cancelEditing() {
+    setEditingMessageId(null);
+    setEditContent("");
+  }
+
+  async function saveEdit() {
+    if (!editingMessageId || !editContent.trim()) return;
+    const client = clientRef.current;
+    if (!client?.connected) {
+      setError("Not connected");
+      return;
+    }
+
+    try {
+      setError(null);
+      let outgoingContent = editContent;
+
+      if (e2eeEnabled && hasSession(conversationId)) {
+        const { ciphertext } = await benchmarkedEncryptChatMessage(conversationId, editContent);
+        outgoingContent = ciphertext;
+      }
+
+      client.publish({
+        destination: "/app/chat.edit",
+        body: JSON.stringify({
+          conversationId: Number(conversationId),
+          messageId: editingMessageId,
+          content: outgoingContent,
+        }),
+      });
+      setEditingMessageId(null);
+      setEditContent("");
+    } catch (e: any) {
+      setError(e?.message || "Failed to edit message");
+    }
+  }
+
+  async function deleteMessage(messageId: number) {
+    const client = clientRef.current;
+    if (!client?.connected) {
+      setError("Not connected");
+      return;
+    }
+
+    try {
+      setError(null);
+      client.publish({
+        destination: "/app/chat.delete",
+        body: JSON.stringify({
+          conversationId: Number(conversationId),
+          messageId,
+        }),
+      });
+    } catch (e: any) {
+      setError(e?.message || "Failed to delete message");
+    }
   }
 
   async function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -929,6 +1008,8 @@ export default function MessagesPage() {
     setOtherUserTyping(false);
     setLastReadMessageId(null);
     setMessagesLoaded(false);
+    setEditingMessageId(null);
+    setEditContent("");
     setE2eeReady(false);
     setAlgLocked(false);
     rawMessagesRef.current = [];

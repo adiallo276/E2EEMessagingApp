@@ -46,35 +46,34 @@ function ctFromPolys(u: Polynomial, v: Polynomial): MiniKyberCiphertext {
   return { u: u.getCoeffs(), v: v.getCoeffs() };
 }
 
-function encodeMessageBit(m: number): Polynomial {
+function encodeMessage(m: number): Polynomial {
   const N = Polynomial.N;
   const Q = Polynomial.Q;
+  const halfQ = Math.floor(Q / 2);
   const c = new Array<number>(N);
 
-  if (m === 1) {
-    const halfQ = Math.floor(Q / 2);
-    c.fill(halfQ);
-  } else {
-    c.fill(0);
+  for (let i = 0; i < N; i++) {
+    c[i] = ((m >> i) & 1) === 1 ? halfQ : 0;
   }
 
   return new Polynomial(c);
 }
 
-function decodeMessageBit(w: Polynomial): number {
+function decodeMessage(w: Polynomial): number {
   const Q = Polynomial.Q;
   const c = w.getCoeffs();
-  let sum = 0;
+  let m = 0;
 
-  for (const x of c) {
-    let v = x % Q;
+  for (let i = 0; i < c.length; i++) {
+    let v = c[i] % Q;
     if (v < 0) v += Q;
-    sum += v;
+    // coefficient in [Q/4, 3Q/4) → bit is 1
+    if (v > Q / 4 && v < (3 * Q) / 4) {
+      m |= (1 << i);
+    }
   }
 
-  const avg = sum / c.length;
-  const threshold = Q / 4.0;
-  return avg > threshold ? 1 : 0;
+  return m;
 }
 
 async function sha256(data: Uint8Array): Promise<Uint8Array> {
@@ -120,8 +119,8 @@ export async function miniKyberEncapsulate(pk: MiniKyberPublicKey): Promise<Mini
   const e1 = await Polynomial.randomSmall();
   const e2 = await Polynomial.randomSmall();
 
-  const m = (crypto.getRandomValues(new Uint8Array(1))[0] & 1) ? 1 : 0;
-  const mPoly = encodeMessageBit(m);
+  const m = crypto.getRandomValues(new Uint8Array(1))[0];
+  const mPoly = encodeMessage(m);
 
   const u = a.mul(r).add(e1);
   const v = t.mul(r).add(e2).add(mPoly);
@@ -140,7 +139,7 @@ export async function miniKyberDecapsulate(sk: MiniKyberSecretKey, ct: MiniKyber
   const v = polyFrom(ct.v);
 
   const w = v.sub(u.mul(s));
-  const mRecovered = decodeMessageBit(w);
+  const mRecovered = decodeMessage(w);
 
   return deriveSharedSecret(mRecovered, { u, v });
 }

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-type MessageContent = 
-  | string 
-  | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+type MessageContent =
+  | string
+  | Array<
+      | { type: "text"; text: string }
+      | { type: "image_url"; image_url: { url: string } }
+    >;
 
 type ChatMessage = {
   role: "user" | "assistant" | "system";
@@ -11,16 +14,22 @@ type ChatMessage = {
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, apiKey, hasImages } = await req.json();
+    // API key is read exclusively from the server environment.
+    // It is NEVER accepted from the client request body — this prevents
+    // the key from being exposed in browser DevTools, localStorage, or
+    // network traffic.
+    const apiKey = process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
-        { error: "OpenAI API key is required" },
-        { status: 400 }
+        { error: "OpenAI API key not configured on server. Add OPENAI_API_KEY to .env.local." },
+        { status: 500 }
       );
     }
 
-    // Use GPT-4o if there are images, otherwise use GPT-3.5-turbo
+    const { messages, hasImages } = await req.json();
+
+    // Use GPT-4o for image requests, GPT-3.5-turbo for text-only
     const model = hasImages ? "gpt-4o" : "gpt-3.5-turbo";
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -48,7 +57,11 @@ export async function POST(req: NextRequest) {
       const errorData = await response.json().catch(() => ({}));
       console.error("OpenAI API error:", errorData);
       return NextResponse.json(
-        { error: errorData.error?.message || `OpenAI API error (${response.status})` },
+        {
+          error:
+            errorData.error?.message ||
+            `OpenAI API error (${response.status})`,
+        },
         { status: response.status }
       );
     }

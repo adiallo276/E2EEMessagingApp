@@ -191,8 +191,8 @@ function decodeMessageBit(W: MatrixTS): number {
   if (W.rows !== 1 || W.cols !== 1) throw new Error("W must be 1x1");
   let v = W.get(0, 0) % Q;
   if (v < 0) v += Q;
-  const threshold = Q / 4.0;
-  return v > threshold ? 1 : 0;
+  // v in [Q/4, 3Q/4) → closer to Q/2 → message bit is 1
+  return (v > Q / 4 && v < (3 * Q) / 4) ? 1 : 0;
 }
 
 async function deriveSharedSecret(m: number, U: MatrixTS, V: MatrixTS): Promise<Uint8Array> {

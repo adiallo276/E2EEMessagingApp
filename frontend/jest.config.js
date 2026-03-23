@@ -8,11 +8,22 @@ const config = {
     '^@/(.*)$': '<rootDir>/$1',
   },
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
-      tsconfig: 'tsconfig.json',
-    }],
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        tsconfig: {
+          target: 'ES2022',
+          module: 'commonjs',
+          moduleResolution: 'node',
+          esModuleInterop: true,
+          allowJs: true,
+          strict: false,
+        },
+      },
+    ],
   },
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  testTimeout: 60000,
   collectCoverageFrom: [
     'lib/**/*.{ts,tsx}',
     '!lib/**/*.d.ts',

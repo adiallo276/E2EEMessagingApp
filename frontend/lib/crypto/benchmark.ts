@@ -564,8 +564,59 @@ export type TimingStats = {
   min: number;
   max: number;
   stdDev: number;
+  ci95Lower: number;
+  ci95Upper: number;
   samples: number[];
 };
+
+// ============ Statistical Analysis Functions ============
+
+export function calculateConfidenceInterval(
+  samples: number[],
+  confidence = 0.95
+): { lower: number; upper: number } {
+  const n = samples.length;
+  if (n < 2) return { lower: 0, upper: 0 };
+  const mean = samples.reduce((a, b) => a + b, 0) / n;
+  const stdDev = Math.sqrt(
+    samples.reduce((sum, x) => sum + Math.pow(x - mean, 2), 0) / n
+  );
+  const z = confidence === 0.95 ? 1.96 : 2.576; // 95% or 99%
+  const margin = z * (stdDev / Math.sqrt(n));
+  return { lower: mean - margin, upper: mean + margin };
+}
+
+export type WelchTTestResult = {
+  tStatistic: number;
+  degreesOfFreedom: number;
+  significant: boolean; // p < 0.05 approximation
+  effectSize: string;   // "negligible" | "small" | "medium" | "large"
+};
+
+export function welchTTest(a: number[], b: number[]): WelchTTestResult {
+  const meanA = a.reduce((x, y) => x + y, 0) / a.length;
+  const meanB = b.reduce((x, y) => x + y, 0) / b.length;
+  const varA = a.reduce((sum, x) => sum + Math.pow(x - meanA, 2), 0) / (a.length - 1);
+  const varB = b.reduce((sum, x) => sum + Math.pow(x - meanB, 2), 0) / (b.length - 1);
+  const seA = varA / a.length;
+  const seB = varB / b.length;
+  const se = Math.sqrt(seA + seB);
+  const t = (meanA - meanB) / se;
+  const df =
+    Math.pow(seA + seB, 2) /
+    (Math.pow(seA, 2) / (a.length - 1) + Math.pow(seB, 2) / (b.length - 1));
+  // Cohen's d effect size
+  const pooledSD = Math.sqrt((varA + varB) / 2);
+  const d = Math.abs(meanA - meanB) / pooledSD;
+  const effectSize =
+    d < 0.2 ? "negligible" : d < 0.5 ? "small" : d < 0.8 ? "medium" : "large";
+  return {
+    tStatistic: t,
+    degreesOfFreedom: df,
+    significant: Math.abs(t) > 1.96, // approximate p < 0.05
+    effectSize,
+  };
+}
 
 export type AlgorithmResults = {
   keyGen: TimingStats;
@@ -579,25 +630,37 @@ export type AlgorithmResults = {
   };
 };
 
+export type TTestComparisons = {
+  keyGen_kyberVsFrodo: WelchTTestResult;
+  keyGen_kyberVsNtru: WelchTTestResult;
+  keyGen_frodoVsNtru: WelchTTestResult;
+  encap_kyberVsFrodo: WelchTTestResult;
+  encap_kyberVsNtru: WelchTTestResult;
+  decap_kyberVsFrodo: WelchTTestResult;
+  decap_kyberVsNtru: WelchTTestResult;
+};
+
 export type BenchmarkResults = {
   iterations: number;
   timestamp: number;
   kyber: AlgorithmResults;
   frodo: AlgorithmResults;
   ntru: AlgorithmResults;
+  tTests: TTestComparisons;
 };
 
 function calculateStats(samples: number[]): TimingStats {
   const n = samples.length;
-  if (n === 0) return { avg: 0, min: 0, max: 0, stdDev: 0, samples: [] };
+  if (n === 0) return { avg: 0, min: 0, max: 0, stdDev: 0, ci95Lower: 0, ci95Upper: 0, samples: [] };
   
   const avg = samples.reduce((a, b) => a + b, 0) / n;
   const min = Math.min(...samples);
   const max = Math.max(...samples);
   const variance = samples.reduce((sum, x) => sum + Math.pow(x - avg, 2), 0) / n;
   const stdDev = Math.sqrt(variance);
+  const margin = 1.96 * (stdDev / Math.sqrt(n));
   
-  return { avg, min, max, stdDev, samples };
+  return { avg, min, max, stdDev, ci95Lower: avg - margin, ci95Upper: avg + margin, samples };
 }
 
 export type BenchmarkProgress = {
@@ -804,27 +867,31 @@ export async function runKemBenchmark(
   }
   
   onProgress?.({ phase: "Complete", current: iterations, total: iterations });
-  
+
+  const kyberKG = calculateStats(kyberKeyGenTimes);
+  const kyberEnc = calculateStats(kyberEncapTimes);
+  const kyberDec = calculateStats(kyberDecapTimes);
+  const frodoKG = calculateStats(frodoKeyGenTimes);
+  const frodoEnc = calculateStats(frodoEncapTimes);
+  const frodoDec = calculateStats(frodoDecapTimes);
+  const ntruKG = calculateStats(ntruKeyGenTimes);
+  const ntruEnc = calculateStats(ntruEncapTimes);
+  const ntruDec = calculateStats(ntruDecapTimes);
+
   return {
     iterations,
     timestamp: Date.now(),
-    kyber: {
-      keyGen: calculateStats(kyberKeyGenTimes),
-      encapsulate: calculateStats(kyberEncapTimes),
-      decapsulate: calculateStats(kyberDecapTimes),
-      sizes: kyberSizes,
-    },
-    frodo: {
-      keyGen: calculateStats(frodoKeyGenTimes),
-      encapsulate: calculateStats(frodoEncapTimes),
-      decapsulate: calculateStats(frodoDecapTimes),
-      sizes: frodoSizes,
-    },
-    ntru: {
-      keyGen: calculateStats(ntruKeyGenTimes),
-      encapsulate: calculateStats(ntruEncapTimes),
-      decapsulate: calculateStats(ntruDecapTimes),
-      sizes: ntruSizes,
+    kyber: { keyGen: kyberKG, encapsulate: kyberEnc, decapsulate: kyberDec, sizes: kyberSizes },
+    frodo: { keyGen: frodoKG, encapsulate: frodoEnc, decapsulate: frodoDec, sizes: frodoSizes },
+    ntru:  { keyGen: ntruKG,  encapsulate: ntruEnc,  decapsulate: ntruDec,  sizes: ntruSizes  },
+    tTests: {
+      keyGen_kyberVsFrodo: welchTTest(kyberKeyGenTimes, frodoKeyGenTimes),
+      keyGen_kyberVsNtru:  welchTTest(kyberKeyGenTimes, ntruKeyGenTimes),
+      keyGen_frodoVsNtru:  welchTTest(frodoKeyGenTimes, ntruKeyGenTimes),
+      encap_kyberVsFrodo:  welchTTest(kyberEncapTimes,  frodoEncapTimes),
+      encap_kyberVsNtru:   welchTTest(kyberEncapTimes,  ntruEncapTimes),
+      decap_kyberVsFrodo:  welchTTest(kyberDecapTimes,  frodoDecapTimes),
+      decap_kyberVsNtru:   welchTTest(kyberDecapTimes,  ntruDecapTimes),
     },
   };
 }

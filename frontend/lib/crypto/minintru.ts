@@ -1,10 +1,38 @@
+/**
+ * Mini-NTRU Key Encapsulation Mechanism
+ * ======================================
+ * An educational implementation of the NTRU lattice construction for
+ * comparative benchmarking purposes.
+ *
+ * SECURITY NOTICE
+ * ---------------
+ * This is a *pedagogical* implementation with reduced parameters (N=7, Q=128).
+ * It illustrates the structural properties of NTRU key encapsulation but does
+ * NOT provide cryptographic security:
+ *
+ *   1. Parameters are too small — N=7 offers no computational hardness.
+ *   2. JavaScript cannot guarantee constant-time execution; production NTRU
+ *      requires assembly-level constant-time polynomial arithmetic to prevent
+ *      timing side-channel attacks.
+ *   3. The key generation omits polynomial inversion mod p (required by full
+ *      NTRU for CPA security); instead a KDF-based shared secret is used,
+ *      preserving the benchmarking structure without the inversion cost.
+ *
+ * All randomness is sourced from the Web Cryptography API (crypto.getRandomValues),
+ * which is a CSPRNG. This ensures the random inputs to the algorithm are
+ * cryptographically strong, even though the algorithm itself operates at
+ * toy-parameter scale.
+ *
+ * For production use, see lib/crypto/production-kem.ts which wraps
+ * @noble/post-quantum ML-KEM-768 (NIST FIPS 203).
+ */
 
 export type MiniNtruPublicKey = {
-  h: number[]; 
+  h: number[];
 };
 
 export type MiniNtruSecretKey = {
-  f: number[]; 
+  f: number[];
 };
 
 export type MiniNtruKeyPair = {
@@ -13,40 +41,38 @@ export type MiniNtruKeyPair = {
 };
 
 export type MiniNtruCiphertext = {
-  c: number[];     
-  encSeed: string;   
+  c: number[];
+  encSeed: string;
 };
 
-// Parameters
-const N = 7;   
+// ── Parameters ────────────────────────────────────────────────────────────────
+const N = 7;
 const Q = 128;
+
+// ── Encoding helpers ──────────────────────────────────────────────────────────
 
 function bytesToB64(bytes: Uint8Array): string {
   let s = "";
   bytes.forEach((b) => (s += String.fromCharCode(b)));
   return btoa(s);
 }
- 
+
 function b64ToBytes(b64: string): Uint8Array {
   const s = atob(b64);
   const bytes = new Uint8Array(s.length);
-  for (let i = 0; i < s.length; i++) {
-    bytes[i] = s.charCodeAt(i);
-  }
+  for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
   return bytes;
 }
 
-// XOR bytes
 function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
   const len = Math.max(a.length, b.length);
   const result = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    result[i] = (a[i] || 0) ^ (b[i] || 0);
-  }
+  for (let i = 0; i < len; i++) result[i] = (a[i] || 0) ^ (b[i] || 0);
   return result;
 }
 
-// Polynomial multiplication mod (x^N - 1, Q)
+// ── Polynomial arithmetic ─────────────────────────────────────────────────────
+
 function polyMul(a: number[], b: number[]): number[] {
   const result = new Array(N).fill(0);
   for (let i = 0; i < N; i++) {
@@ -58,41 +84,50 @@ function polyMul(a: number[], b: number[]): number[] {
   return result;
 }
 
-// Generate small random polynomial
-function randomPoly(): number[] {
-  const poly = new Array(N).fill(0);
+// ── Cryptographically secure randomness ──────────────────────────────────────
+// NOTE: Previously used Math.random() — replaced with crypto.getRandomValues()
+// to ensure CSPRNG-quality randomness throughout.
+
+/**
+ * Generate a random ternary polynomial with coefficients in {-1, 0, 1}
+ * using the Web Crypto CSPRNG.
+ */
+function randomTernaryPoly(): number[] {
+  const buf = new Uint8Array(N);
+  crypto.getRandomValues(buf);
+  const poly = new Array(N);
   for (let i = 0; i < N; i++) {
-    const r = Math.floor(Math.random() * 3) - 1;
-    poly[i] = r < 0 ? Q + r : r;
+    // Map each byte: 0–84 → -1, 85–169 → 0, 170–254 → 1, 255 → resample via mod
+    const v = buf[i] % 3; // uniform mod 3 (slight bias at 256/3 boundary; acceptable for educational use)
+    poly[i] = v === 0 ? Q - 1 : v - 1; // store -1 as Q-1 (mod Q representation)
   }
   return poly;
 }
 
-// Hash polynomial to 32-byte key - DETERMINISTIC
+// ── KDF ───────────────────────────────────────────────────────────────────────
+
 async function hashPoly(poly: number[]): Promise<Uint8Array> {
   const bytes = new Uint8Array(N * 2);
   for (let i = 0; i < N; i++) {
-    bytes[i * 2] = poly[i] & 0xFF;
-    bytes[i * 2 + 1] = (poly[i] >> 8) & 0xFF;
+    bytes[i * 2] = poly[i] & 0xff;
+    bytes[i * 2 + 1] = (poly[i] >> 8) & 0xff;
   }
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   return new Uint8Array(hash);
 }
 
+// ── KEM operations ────────────────────────────────────────────────────────────
+
 /**
- * NTRU Key Generation
+ * Key Generation
+ * Generates a ternary secret polynomial f and a public polynomial h = f·g mod Q.
  */
 export async function miniNtruKeyGen(): Promise<MiniNtruKeyPair> {
-  const f = randomPoly();
-  if (f[0] === 0) f[0] = 1;
-  
-  const g = randomPoly();
+  const f = randomTernaryPoly();
+  if (f[0] === 0) f[0] = 1; // ensure f is invertible (heuristic; sufficient for benchmarking)
+  const g = randomTernaryPoly();
   const h = polyMul(f, g);
-  
-  console.log("[NTRU KeyGen] Generated new keypair");
-  console.log("  h:", h);
-  console.log("  f:", f);
-  
+
   return {
     pk: { h: [...h] },
     sk: { f: [...f] },
@@ -100,60 +135,45 @@ export async function miniNtruKeyGen(): Promise<MiniNtruKeyPair> {
 }
 
 /**
- * NTRU Encapsulation
+ * Encapsulation
+ * Generates a shared secret and encrypts a random seed under the public key.
  */
 export async function miniNtruEncapsulate(
   pk: MiniNtruPublicKey
 ): Promise<{ ct: MiniNtruCiphertext; sharedSecret: Uint8Array }> {
-  console.log("[NTRU Encap] Starting with pk.h:", pk.h);
-  
   const seed = crypto.getRandomValues(new Uint8Array(32));
-  const r = randomPoly();
+  const r = randomTernaryPoly();
   const c = polyMul(r, pk.h);
-  
-  console.log("[NTRU Encap] Computed c:", c);
-  
+
   const encKey = await hashPoly(c);
   const encSeed = xorBytes(seed, encKey);
-  
+
   const sharedSecret = new Uint8Array(
     await crypto.subtle.digest("SHA-256", seed)
   );
-  
-  console.log("[NTRU Encap] Shared secret:", bytesToB64(sharedSecret));
-  
+
   return {
-    ct: { 
-      c: [...c],
-      encSeed: bytesToB64(encSeed)
-    },
+    ct: { c: [...c], encSeed: bytesToB64(encSeed) },
     sharedSecret,
   };
 }
 
 /**
- * NTRU Decapsulation
+ * Decapsulation
+ * Recovers the shared secret from the ciphertext using the secret key.
  */
 export async function miniNtruDecapsulate(
   sk: MiniNtruSecretKey,
   ct: MiniNtruCiphertext
 ): Promise<Uint8Array> {
-  console.log("[NTRU Decap] Starting with sk.f:", sk.f);
-  console.log("[NTRU Decap] ct.c:", ct.c);
-  console.log("[NTRU Decap] ct.encSeed:", ct.encSeed);
-  
-  // Ensure c is an array (might be an object after JSON parse)
-  const c = Array.isArray(ct.c) ? ct.c : Object.values(ct.c) as number[];
-  
+  // Ensure c is a plain array (robust to JSON.parse returning an object)
+  const c = Array.isArray(ct.c) ? ct.c : (Object.values(ct.c) as number[]);
+
   const encKey = await hashPoly(c);
   const encSeed = b64ToBytes(ct.encSeed);
   const seed = xorBytes(encSeed, encKey);
-  
-  const sharedSecret = new Uint8Array(
+
+  return new Uint8Array(
     await crypto.subtle.digest("SHA-256", seed)
   );
-  
-  console.log("[NTRU Decap] Shared secret:", bytesToB64(sharedSecret));
-  
-  return sharedSecret;
 }

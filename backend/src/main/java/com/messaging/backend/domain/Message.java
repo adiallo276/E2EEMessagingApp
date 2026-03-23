@@ -57,9 +57,12 @@ public class Message {
     public Conversation getConversation() { return conversation; }
     public User getSender() { return sender; }
     public String getContent() { return content; }
+    public void setContent(String content) { this.content = content; }
     public boolean isE2ee() { return e2ee; }
     public String getIvB64() { return ivB64; }
+    public void setIvB64(String ivB64) { this.ivB64 = ivB64; }
     public String getCiphertextB64() { return ciphertextB64; }
+    public void setCiphertextB64(String ciphertextB64) { this.ciphertextB64 = ciphertextB64; }
     public Instant getTimestamp() { return timestamp; }
 
     public boolean isEdited() { return edited; }
