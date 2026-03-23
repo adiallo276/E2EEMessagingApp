@@ -1,4 +1,0 @@
-org.springframework.test.context.ContextCustomizerFactory = com.mycompany.myapp.\
-    config.SqlTestContainersSpringContextCustomizerFactory,com.mycompany.myapp.\
-    config.TestContainersSpringContextCustomizerFactory,com.mycompany.myapp.\
-    config.PulsarTestContainersSpringContextCustomizerFactory
