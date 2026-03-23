@@ -46,7 +46,7 @@
 % ============ Section 1 ============
 \section{Introduction}
 
-Modern secure communications depend on integer factorisation (RSA) and discrete logarithm (ECDH/ECDSA) hardness. In 1994, Shor demonstrated that a quantum computer solves both in polynomial time \cite{shor1994}---an exponential speedup that would render RSA-2048 and ECDH-256 trivially breakable. While cryptographically relevant quantum computers remain a decade away, ``harvest now, decrypt later'' (HNDL) attacks make the transition urgent: adversaries capture encrypted traffic today to decrypt once quantum computers become available.
+Modern secure communications depend on integer factorisation (RSA) and discrete logarithm (ECDH/ECDSA) hardness. In 1994, Shor demonstrated that a quantum computer solves both in polynomial time \cite{shor1994}---an exponential speedup that would render RSA-2048 and ECDH-256 trivially breakable. While some say cryptographically relevant quantum computers remain a decade away, ``harvest now, decrypt later'' (HNDL) attacks make the transition urgent: adversaries capture encrypted traffic today to decrypt once quantum computers become available.
 
 This project addresses this challenge with two goals: (1) demonstrate that PQC can be integrated into real-world messaging without compromising user experience, and (2) provide empirical benchmarking data comparing Mini-Kyber (Ring-LWE), Mini-Frodo (standard LWE), and Mini-NTRU (NTRU lattice) against each other and against ECDH (P-256).
 
@@ -377,7 +377,7 @@ The Mini implementations are not cryptographically secure: parameters are too sm
 
 \subsection{Lessons Learned}
 
-\textbf{Framework selection:} Custom stacks provide better control than opinionated scaffolding for security-specialised applications. \textbf{Scope management:} Mini implementations preserved research value while meeting timeline constraints; recognising when to simplify without losing essential properties is a key engineering skill. \textbf{Testing:} The test suite was indispensable---three bugs that would have been invisible in integration testing were caught through unit-level correctness sweeps.
+\textbf{Framework selection:} Custom stacks provide better control than opinionated scaffolding for security-specialised applications. \textbf{Scope management:} Mini implementations preserved research value while meeting timeline constraints; recognising when to simplify without losing essential properties is a key engineering skill. \textbf{Testing:} The test suite was indispensable---four bugs that would have been invisible in integration testing were caught through unit-level correctness sweeps.
 
 \subsection{Recommendations for Practitioners}
 
