@@ -47,6 +47,9 @@ public class MessageController {
         d.ivB64 = m.getIvB64();
         d.ciphertextB64 = m.getCiphertextB64();
         d.timestamp = m.getTimestamp();
+        d.edited = m.isEdited();
+        d.editedAt = m.getEditedAt();
+        d.deleted = m.isDeleted();
         return d;
     }
 }

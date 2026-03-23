@@ -11,4 +11,7 @@ public class MessageDto {
     public String ivB64;
     public String ciphertextB64;
     public Instant timestamp;
+    public boolean edited;
+    public Instant editedAt;
+    public boolean deleted;
 }
