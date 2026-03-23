@@ -5,6 +5,8 @@ import com.messaging.backend.repository.ConversationRepository;
 import com.messaging.backend.repository.MessageRepository;
 import com.messaging.backend.repository.UserRepository;
 import com.messaging.backend.websocket.dto.ChatMessageRequest;
+import com.messaging.backend.websocket.dto.DeleteMessageRequest;
+import com.messaging.backend.websocket.dto.EditMessageRequest;
 import com.messaging.backend.websocket.dto.MessageDto;
 import com.messaging.backend.websocket.dto.TypingEvent;
 import com.messaging.backend.websocket.dto.ReadReceipt;
@@ -97,7 +99,65 @@ public class ChatWsController {
         d.ivB64 = m.getIvB64();
         d.ciphertextB64 = m.getCiphertextB64();
         d.timestamp = m.getTimestamp();
+        d.edited = m.isEdited();
+        d.editedAt = m.getEditedAt();
+        d.deleted = m.isDeleted();
         return d;
+    }
+
+    @MessageMapping("/chat.edit")
+    public void editMessage(EditMessageRequest req, Principal principal) {
+        if (principal == null) {
+            throw new RuntimeException("Unauthenticated STOMP session");
+        }
+
+        String username = principal.getName();
+
+        Message message = messages.findById(req.messageId)
+                .orElseThrow(() -> new RuntimeException("Message not found"));
+
+        if (!message.getSender().getUsername().equals(username)) {
+            throw new RuntimeException("Cannot edit another user's message");
+        }
+
+        if (!message.getConversation().getId().equals(req.conversationId)) {
+            throw new RuntimeException("Message does not belong to this conversation");
+        }
+
+        message.setContent(req.content);
+        message.setEdited(true);
+        message.setEditedAt(Instant.now());
+        messages.save(message);
+
+        broker.convertAndSend("/topic/conversations/" + req.conversationId, toDto(message));
+    }
+
+    @MessageMapping("/chat.delete")
+    public void deleteMessage(DeleteMessageRequest req, Principal principal) {
+        if (principal == null) {
+            throw new RuntimeException("Unauthenticated STOMP session");
+        }
+
+        String username = principal.getName();
+
+        Message message = messages.findById(req.messageId)
+                .orElseThrow(() -> new RuntimeException("Message not found"));
+
+        if (!message.getSender().getUsername().equals(username)) {
+            throw new RuntimeException("Cannot delete another user's message");
+        }
+
+        if (!message.getConversation().getId().equals(req.conversationId)) {
+            throw new RuntimeException("Message does not belong to this conversation");
+        }
+
+        message.setDeleted(true);
+        message.setContent(null);
+        message.setIvB64(null);
+        message.setCiphertextB64(null);
+        messages.save(message);
+
+        broker.convertAndSend("/topic/conversations/" + req.conversationId, toDto(message));
     }
 
     @MessageMapping("/chat.typing")

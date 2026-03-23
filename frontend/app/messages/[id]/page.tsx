@@ -47,6 +47,9 @@ type Message = {
   content: string;
   senderUsername?: string;
   timestamp?: string;
+  edited?: boolean;
+  editedAt?: string;
+  deleted?: boolean;
 };
 
 type ViewMessage = Message & {
@@ -163,6 +166,10 @@ export default function MessagesPage() {
   const [sendingVoice, setSendingVoice] = useState<boolean>(false);
   const [recordingDuration, setRecordingDuration] = useState<number>(0);
 
+  // Edit & delete state
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState<string>("");
+
   // Typing & read receipts
   const [otherUserTyping, setOtherUserTyping] = useState<boolean>(false);
   const [lastReadMessageId, setLastReadMessageId] = useState<number | null>(null);
@@ -201,6 +208,7 @@ export default function MessagesPage() {
 
   function formatLastMessage(msg: any, myUsername: string): string {
     const prefix = msg.senderUsername === myUsername ? "You: " : "";
+    if (msg.deleted) return prefix + "This message was deleted";
     if (msg.content) {
       try {
         const env = JSON.parse(msg.content);
@@ -218,6 +226,10 @@ export default function MessagesPage() {
   }
 
   async function decorateMessage(m: Message, canDecrypt: boolean): Promise<ViewMessage> {
+    if (m.deleted) {
+      return { ...m, displayContent: "" };
+    }
+
     const env = tryParseEnvelope(m.content);
 
     if (!env) {
@@ -473,11 +485,22 @@ export default function MessagesPage() {
           setOtherUserTyping(false);
         }
 
-        // Add message to list
-        rawMessagesRef.current = [...rawMessagesRef.current, incoming];
-        const decorated = await decorateMessage(incoming, hasSession(conversationId));
-        setMessages(prev => [...prev, decorated]);
-        updateSidebarLastMessage(incoming);
+        // Check if this is an update to an existing message (edit/delete)
+        const existingIndex = rawMessagesRef.current.findIndex(m => m.id === incoming.id);
+        if (existingIndex !== -1) {
+          rawMessagesRef.current = rawMessagesRef.current.map(m =>
+            m.id === incoming.id ? incoming : m
+          );
+          const decorated = await decorateMessage(incoming, hasSession(conversationId));
+          setMessages(prev => prev.map(m => m.id === incoming.id ? decorated : m));
+          updateSidebarLastMessage(incoming);
+        } else {
+          // New message
+          rawMessagesRef.current = [...rawMessagesRef.current, incoming];
+          const decorated = await decorateMessage(incoming, hasSession(conversationId));
+          setMessages(prev => [...prev, decorated]);
+          updateSidebarLastMessage(incoming);
+        }
 
         // Send read receipt
         if (incoming.senderUsername !== myUsername) {
@@ -622,6 +645,69 @@ export default function MessagesPage() {
     setContent("");
   }
 
+  function startEditing(m: ViewMessage) {
+    setEditingMessageId(m.id);
+    setEditContent(m.displayContent);
+  }
+
+  function cancelEditing() {
+    setEditingMessageId(null);
+    setEditContent("");
+  }
+
+  async function saveEdit() {
+    if (!editingMessageId || !editContent.trim()) return;
+    const client = clientRef.current;
+    if (!client?.connected) {
+      setError("Not connected");
+      return;
+    }
+
+    try {
+      setError(null);
+      let outgoingContent = editContent;
+
+      if (e2eeEnabled && hasSession(conversationId)) {
+        const { ciphertext } = await benchmarkedEncryptChatMessage(conversationId, editContent);
+        outgoingContent = ciphertext;
+      }
+
+      client.publish({
+        destination: "/app/chat.edit",
+        body: JSON.stringify({
+          conversationId: Number(conversationId),
+          messageId: editingMessageId,
+          content: outgoingContent,
+        }),
+      });
+      setEditingMessageId(null);
+      setEditContent("");
+    } catch (e: any) {
+      setError(e?.message || "Failed to edit message");
+    }
+  }
+
+  async function deleteMessage(messageId: number) {
+    const client = clientRef.current;
+    if (!client?.connected) {
+      setError("Not connected");
+      return;
+    }
+
+    try {
+      setError(null);
+      client.publish({
+        destination: "/app/chat.delete",
+        body: JSON.stringify({
+          conversationId: Number(conversationId),
+          messageId,
+        }),
+      });
+    } catch (e: any) {
+      setError(e?.message || "Failed to delete message");
+    }
+  }
+
   async function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -670,7 +756,7 @@ export default function MessagesPage() {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
 
-      recorder.start();
+      recorder.start(250);
       setRecording(true);
       setRecordingDuration(0);
       recordingIntervalRef.current = setInterval(() => {
@@ -820,6 +906,8 @@ export default function MessagesPage() {
     setOtherUserTyping(false);
     setLastReadMessageId(null);
     setMessagesLoaded(false);
+    setEditingMessageId(null);
+    setEditContent("");
     setE2eeReady(false);
     setAlgLocked(false);
     rawMessagesRef.current = [];
@@ -1103,37 +1191,93 @@ export default function MessagesPage() {
                 {messages.map((m) => {
                   const isMe = (m.senderUsername ?? "") === usernameRef.current;
                   const isRead = isMe && lastReadMessageId !== null && m.id <= lastReadMessageId;
-                  
+                  const isEditing = editingMessageId === m.id;
+                  const isTextMessage = !m.voiceData && !m.imageData && !m.deleted;
+
                   return (
-                    <div key={m.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                    <div key={m.id} className={`group flex ${isMe ? "justify-end" : "justify-start"}`}>
                       <div className={`flex flex-col ${isMe ? "items-end" : "items-start"} max-w-[75%]`}>
-                        <div className={`rounded-2xl px-4 py-2.5 text-sm ${isMe ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                          <div className="mb-1 text-[11px] opacity-70 flex items-center justify-between gap-4">
-                            <span className="font-medium">{m.senderUsername ?? "Unknown"}</span>
-                            <span className="text-[10px] shrink-0">{formatMessageTime(m.timestamp)}</span>
-                          </div>
-                          {m.voiceData ? (
-                            <div className="flex items-center gap-2">
-                              <svg className="w-4 h-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                              </svg>
-                              <audio
-                                controls
-                                src={`data:${m.voiceData.mimeType};base64,${m.voiceData.data}`}
-                                className="max-w-[240px] h-8"
-                              />
+                        {m.deleted ? (
+                          <div className={`rounded-2xl px-4 py-2.5 text-sm border border-border/50 ${isMe ? "bg-muted/50" : "bg-muted/30"}`}>
+                            <div className="mb-1 text-[11px] opacity-70 flex items-center justify-between gap-4">
+                              <span className="font-medium">{m.senderUsername ?? "Unknown"}</span>
+                              <span className="text-[10px] shrink-0">{formatMessageTime(m.timestamp)}</span>
                             </div>
-                          ) : m.imageData ? (
-                            <img
-                              src={`data:${m.imageData.mimeType};base64,${m.imageData.data}`}
-                              alt="Image"
-                              className="max-w-full rounded-lg max-h-64 object-contain"
-                            />
-                          ) : (
-                            <p className="whitespace-pre-wrap break-words">{m.displayContent}</p>
-                          )}
-                        </div>
-                        {isMe && (
+                            <p className="italic text-muted-foreground">This message was deleted</p>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            {isMe && !isEditing && (
+                              <div className="flex items-center rounded-lg border border-border/60 bg-background shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                                {isTextMessage && (
+                                  <button
+                                    onClick={() => startEditing(m)}
+                                    className="px-2 py-1.5 text-muted-foreground hover:text-foreground transition-colors border-r border-border/60"
+                                    title="Edit"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z" />
+                                    </svg>
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => deleteMessage(m.id)}
+                                  className="px-2 py-1.5 text-muted-foreground hover:text-red-500 transition-colors"
+                                  title="Delete"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            )}
+                            <div className={`rounded-2xl px-4 py-2.5 text-sm ${isMe ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                              <div className="mb-1 text-[11px] opacity-70 flex items-center justify-between gap-4">
+                                <span className="font-medium">{m.senderUsername ?? "Unknown"}</span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {m.edited && <span className="text-[10px] italic">edited</span>}
+                                  <span className="text-[10px]">{formatMessageTime(m.timestamp)}</span>
+                                </div>
+                              </div>
+                              {isEditing ? (
+                                <div className="flex flex-col gap-2">
+                                  <input
+                                    type="text"
+                                    value={editContent}
+                                    onChange={(e) => setEditContent(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveEdit(); } if (e.key === "Escape") cancelEditing(); }}
+                                    className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-ring"
+                                    autoFocus
+                                  />
+                                  <div className="flex items-center gap-2 text-[11px]">
+                                    <button onClick={cancelEditing} className="text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+                                    <button onClick={saveEdit} className="font-medium hover:opacity-80 transition-opacity">Save</button>
+                                  </div>
+                                </div>
+                              ) : m.voiceData ? (
+                                <div className="flex items-center gap-2">
+                                  <svg className="w-4 h-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                  </svg>
+                                  <audio
+                                    controls
+                                    src={`data:${m.voiceData.mimeType};base64,${m.voiceData.data}`}
+                                    className="max-w-[240px] h-8"
+                                  />
+                                </div>
+                              ) : m.imageData ? (
+                                <img
+                                  src={`data:${m.imageData.mimeType};base64,${m.imageData.data}`}
+                                  alt="Image"
+                                  className="max-w-full rounded-lg max-h-64 object-contain"
+                                />
+                              ) : (
+                                <p className="whitespace-pre-wrap break-words">{m.displayContent}</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {isMe && !m.deleted && (
                           <div className="text-[10px] text-muted-foreground mt-1 mr-1 flex items-center gap-1">
                             {isRead ? (
                               <>
