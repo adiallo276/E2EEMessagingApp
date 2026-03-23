@@ -165,6 +165,10 @@ export default function MessagesPage() {
   const [recording, setRecording] = useState<boolean>(false);
   const [sendingVoice, setSendingVoice] = useState<boolean>(false);
   const [recordingDuration, setRecordingDuration] = useState<number>(0);
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState<string>("");
+  const [contextMenuMessageId, setContextMenuMessageId] = useState<number | null>(null);
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Edit & delete state
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
@@ -181,6 +185,8 @@ export default function MessagesPage() {
   const subRef = useRef<StompSubscription | null>(null);
   const typingSubRef = useRef<StompSubscription | null>(null);
   const readSubRef = useRef<StompSubscription | null>(null);
+  const editSubRef = useRef<StompSubscription | null>(null);
+  const deleteSubRef = useRef<StompSubscription | null>(null);
   const usernameRef = useRef<string>("");
   const rawMessagesRef = useRef<Message[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -212,12 +218,12 @@ export default function MessagesPage() {
     if (msg.content) {
       try {
         const env = JSON.parse(msg.content);
-        if (env.type === "E2EE_HELLO") return "🔐 Encryption requested";
-        if (env.type === "E2EE_KEY") return "✓ Encryption established";
-        if (env.type === "E2EE_MSG") return "🔒 Encrypted message";
+        if (env.type === "E2EE_HELLO") return "Encryption requested";
+        if (env.type === "E2EE_KEY") return "Encryption established";
+        if (env.type === "E2EE_MSG") return "Encrypted message";
       } catch {
-        if (msg.content.startsWith("IMG:")) return prefix + "📷 Image";
-        if (msg.content.startsWith("VOICE:")) return prefix + "🎤 Voice message";
+        if (msg.content.startsWith("IMG:")) return prefix + "Image";
+        if (msg.content.startsWith("VOICE:")) return prefix + "Voice message";
         const text = msg.content.length > 30 ? msg.content.substring(0, 30) + "..." : msg.content;
         return prefix + text;
       }
@@ -242,12 +248,12 @@ export default function MessagesPage() {
 
     if (env.type === "E2EE_HELLO") {
       const algName = ALG_INFO[env.alg]?.name || env.alg;
-      return { ...m, displayContent: `🔐 Encryption requested using ${algName}` };
+      return { ...m, displayContent: `Encryption requested using ${algName}` };
     }
 
     if (env.type === "E2EE_KEY") {
       const algName = ALG_INFO[env.alg]?.name || env.alg;
-      return { ...m, displayContent: `✓ Encryption established using ${algName}` };
+      return { ...m, displayContent: `Encryption established using ${algName}` };
     }
 
     if (env.type === "E2EE_MSG") {
@@ -260,10 +266,10 @@ export default function MessagesPage() {
           if (voiceData) return { ...m, displayContent: "[Voice Message]", voiceData };
           return { ...m, displayContent: plaintext };
         } catch {
-          return { ...m, displayContent: "🔒 Encrypted message" };
+          return { ...m, displayContent: "Encrypted message" };
         }
       }
-      return { ...m, displayContent: "🔒 Encrypted message" };
+      return { ...m, displayContent: "Encrypted message" };
     }
 
     return { ...m, displayContent: m.content };
@@ -530,6 +536,35 @@ export default function MessagesPage() {
         }
       });
 
+      // Edit subscription
+      editSubRef.current?.unsubscribe();
+      editSubRef.current = client.subscribe(`/topic/conversations/${conversationId}/edit`, async (msg: IMessage) => {
+        const edited: Message = JSON.parse(msg.body);
+        rawMessagesRef.current = rawMessagesRef.current.map((m) =>
+          m.id === edited.id ? edited : m
+        );
+        const decorated = await decorateMessage(edited, hasSession(conversationId));
+        setMessages((prev) =>
+          prev.map((m) => (m.id === edited.id ? decorated : m))
+        );
+      });
+
+      // Delete subscription
+      deleteSubRef.current?.unsubscribe();
+      deleteSubRef.current = client.subscribe(`/topic/conversations/${conversationId}/delete`, (msg: IMessage) => {
+        const deleted: Message = JSON.parse(msg.body);
+        rawMessagesRef.current = rawMessagesRef.current.map((m) =>
+          m.id === deleted.id ? { ...m, deleted: true, content: "" } : m
+        );
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === deleted.id
+              ? { ...m, deleted: true, displayContent: "", voiceData: undefined, imageData: undefined }
+              : m
+          )
+        );
+      });
+
       // Send read receipts for existing messages
       setTimeout(sendReadReceiptsForUnreadMessages, 500);
     };
@@ -756,7 +791,10 @@ export default function MessagesPage() {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
 
-      recorder.start(250);
+      // 100ms timeslice: chunks accumulate every 100ms so all audio is
+      // captured before stop(). No-timeslice mode causes Safari to fire
+      // ondataavailable with 0 bytes, producing silent/empty recordings.
+      recorder.start(100);
       setRecording(true);
       setRecordingDuration(0);
       recordingIntervalRef.current = setInterval(() => {
@@ -773,9 +811,12 @@ export default function MessagesPage() {
 
     setSendingVoice(true);
 
-    // Wait for the recorder to finish
+    // Request any buffered data that hasn't been delivered yet, then stop.
+    // This flushes the current 100ms chunk before onstop fires, ensuring
+    // no audio is lost between the last timeslice and the stop call.
+    recorder.requestData();
     await new Promise<void>((resolve) => {
-      recorder.onstop = () => resolve();
+      recorder.addEventListener("stop", () => resolve(), { once: true });
       recorder.stop();
     });
 
@@ -828,6 +869,67 @@ export default function MessagesPage() {
       clearInterval(recordingIntervalRef.current);
       recordingIntervalRef.current = null;
     }
+  }
+
+  // ============ Edit / Delete ============
+
+  function handleContextMenu(e: React.MouseEvent, messageId: number) {
+    e.preventDefault();
+    setContextMenuMessageId(messageId);
+    setContextMenuPos({ x: e.clientX, y: e.clientY });
+  }
+
+  function closeContextMenu() {
+    setContextMenuMessageId(null);
+  }
+
+  function startEditing(msg: ViewMessage) {
+    setEditingMessageId(msg.id);
+    setEditContent(msg.displayContent);
+    closeContextMenu();
+  }
+
+  async function submitEdit() {
+    if (!editingMessageId || !editContent.trim()) return;
+    const client = clientRef.current;
+    if (!client?.connected) return;
+
+    let outgoingContent = editContent.trim();
+
+    if (e2eeEnabled && e2eeReady && hasSession(conversationId)) {
+      const { ciphertext } = await benchmarkedEncryptChatMessage(conversationId, outgoingContent);
+      outgoingContent = ciphertext;
+    }
+
+    client.publish({
+      destination: "/app/chat.edit",
+      body: JSON.stringify({
+        messageId: editingMessageId,
+        conversationId: Number(conversationId),
+        content: outgoingContent,
+      }),
+    });
+    setEditingMessageId(null);
+    setEditContent("");
+  }
+
+  function cancelEdit() {
+    setEditingMessageId(null);
+    setEditContent("");
+  }
+
+  function deleteMessage(messageId: number) {
+    const client = clientRef.current;
+    if (!client?.connected) return;
+
+    client.publish({
+      destination: "/app/chat.delete",
+      body: JSON.stringify({
+        messageId,
+        conversationId: Number(conversationId),
+      }),
+    });
+    closeContextMenu();
   }
 
   // ============ UI Handlers ============
@@ -1184,7 +1286,7 @@ export default function MessagesPage() {
                       </svg>
                     </div>
                     <p className="text-sm text-muted-foreground">No messages yet</p>
-                    <p className="text-xs text-muted-foreground mt-1">Send a message to start the conversation</p>
+                    <p className="text-xs text-muted-foreground mt-1">Start the conversation</p>
                   </div>
                 )}
                 
@@ -1192,91 +1294,91 @@ export default function MessagesPage() {
                   const isMe = (m.senderUsername ?? "") === usernameRef.current;
                   const isRead = isMe && lastReadMessageId !== null && m.id <= lastReadMessageId;
                   const isEditing = editingMessageId === m.id;
-                  const isTextMessage = !m.voiceData && !m.imageData && !m.deleted;
 
                   return (
-                    <div key={m.id} className={`group flex ${isMe ? "justify-end" : "justify-start"}`}>
-                      <div className={`flex flex-col ${isMe ? "items-end" : "items-start"} max-w-[75%]`}>
-                        {m.deleted ? (
-                          <div className={`rounded-2xl px-4 py-2.5 text-sm border border-border/50 ${isMe ? "bg-muted/50" : "bg-muted/30"}`}>
-                            <div className="mb-1 text-[11px] opacity-70 flex items-center justify-between gap-4">
-                              <span className="font-medium">{m.senderUsername ?? "Unknown"}</span>
-                              <span className="text-[10px] shrink-0">{formatMessageTime(m.timestamp)}</span>
-                            </div>
-                            <p className="italic text-muted-foreground">This message was deleted</p>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1">
-                            {isMe && !isEditing && (
-                              <div className="flex items-center rounded-lg border border-border/60 bg-background shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
-                                {isTextMessage && (
-                                  <button
-                                    onClick={() => startEditing(m)}
-                                    className="px-2 py-1.5 text-muted-foreground hover:text-foreground transition-colors border-r border-border/60"
-                                    title="Edit"
-                                  >
-                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z" />
-                                    </svg>
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => deleteMessage(m.id)}
-                                  className="px-2 py-1.5 text-muted-foreground hover:text-red-500 transition-colors"
-                                  title="Delete"
-                                >
-                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              </div>
+                    <div key={m.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                      <div
+                        className={`relative flex flex-col ${isMe ? "items-end" : "items-start"} max-w-[75%] group`}
+                        onContextMenu={isMe && !m.deleted ? (e) => handleContextMenu(e, m.id) : undefined}
+                      >
+                        {/* Hover action bar — own non-deleted non-editing messages only */}
+                        {isMe && !m.deleted && !isEditing && (
+                          <div className="hidden group-hover:flex items-center gap-1 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {!m.voiceData && !m.imageData && (
+                              <button
+                                onClick={() => startEditing(m)}
+                                className="flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                title="Edit message"
+                              >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Edit
+                              </button>
                             )}
-                            <div className={`rounded-2xl px-4 py-2.5 text-sm ${isMe ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                              <div className="mb-1 text-[11px] opacity-70 flex items-center justify-between gap-4">
-                                <span className="font-medium">{m.senderUsername ?? "Unknown"}</span>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  {m.edited && <span className="text-[10px] italic">edited</span>}
-                                  <span className="text-[10px]">{formatMessageTime(m.timestamp)}</span>
-                                </div>
-                              </div>
-                              {isEditing ? (
-                                <div className="flex flex-col gap-2">
-                                  <input
-                                    type="text"
-                                    value={editContent}
-                                    onChange={(e) => setEditContent(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveEdit(); } if (e.key === "Escape") cancelEditing(); }}
-                                    className="w-full rounded-md border border-border bg-background text-foreground px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-ring"
-                                    autoFocus
-                                  />
-                                  <div className="flex items-center gap-2 text-[11px]">
-                                    <button onClick={cancelEditing} className="text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-                                    <button onClick={saveEdit} className="font-medium hover:opacity-80 transition-opacity">Save</button>
-                                  </div>
-                                </div>
-                              ) : m.voiceData ? (
-                                <div className="flex items-center gap-2">
-                                  <svg className="w-4 h-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                                  </svg>
-                                  <audio
-                                    controls
-                                    src={`data:${m.voiceData.mimeType};base64,${m.voiceData.data}`}
-                                    className="max-w-[240px] h-8"
-                                  />
-                                </div>
-                              ) : m.imageData ? (
-                                <img
-                                  src={`data:${m.imageData.mimeType};base64,${m.imageData.data}`}
-                                  alt="Image"
-                                  className="max-w-full rounded-lg max-h-64 object-contain"
-                                />
-                              ) : (
-                                <p className="whitespace-pre-wrap break-words">{m.displayContent}</p>
-                              )}
-                            </div>
+                            <button
+                              onClick={() => deleteMessage(m.id)}
+                              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                              title="Delete message"
+                            >
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                              Delete
+                            </button>
                           </div>
                         )}
+                        <div className={`rounded-2xl px-4 py-2.5 text-sm ${m.deleted ? "bg-muted/50 italic" : isMe ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                          <div className="mb-1 text-[11px] opacity-70 flex items-center justify-between gap-4">
+                            <span className="font-medium">{m.senderUsername ?? "Unknown"}</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {m.edited && !m.deleted && (
+                                <span className="text-[10px] opacity-60">edited</span>
+                              )}
+                              <span className="text-[10px]">{formatMessageTime(m.timestamp)}</span>
+                            </div>
+                          </div>
+                          {m.deleted ? (
+                            <p className="text-muted-foreground text-xs">This message was deleted</p>
+                          ) : isEditing ? (
+                            <div className="flex flex-col gap-2">
+                              <input
+                                type="text"
+                                className="w-full rounded border border-border bg-background px-2 py-1 text-sm text-foreground outline-none"
+                                value={editContent}
+                                onChange={(e) => setEditContent(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") { e.preventDefault(); submitEdit(); }
+                                  if (e.key === "Escape") cancelEdit();
+                                }}
+                                autoFocus
+                              />
+                              <div className="flex gap-2 justify-end">
+                                <button onClick={cancelEdit} className="text-[11px] opacity-70 hover:opacity-100">Cancel</button>
+                                <button onClick={submitEdit} className="text-[11px] font-medium opacity-90 hover:opacity-100">Save</button>
+                              </div>
+                            </div>
+                          ) : m.voiceData ? (
+                            <div className="flex items-center gap-2">
+                              <svg className="w-4 h-4 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                              </svg>
+                              <audio
+                                controls
+                                src={`data:${m.voiceData.mimeType};base64,${m.voiceData.data}`}
+                                className="max-w-[240px] h-8"
+                              />
+                            </div>
+                          ) : m.imageData ? (
+                            <img
+                              src={`data:${m.imageData.mimeType};base64,${m.imageData.data}`}
+                              alt="Image"
+                              className="max-w-full rounded-lg max-h-64 object-contain"
+                            />
+                          ) : (
+                            <p className="whitespace-pre-wrap break-words">{m.displayContent}</p>
+                          )}
+                        </div>
                         {isMe && !m.deleted && (
                           <div className="text-[10px] text-muted-foreground mt-1 mr-1 flex items-center gap-1">
                             {isRead ? (
@@ -1296,6 +1398,38 @@ export default function MessagesPage() {
                             )}
                           </div>
                         )}
+
+                        {/* Context menu */}
+                        {contextMenuMessageId === m.id && isMe && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={closeContextMenu} />
+                            <div
+                              className="fixed z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[140px]"
+                              style={{ top: contextMenuPos.y, left: contextMenuPos.x }}
+                            >
+                              {!m.voiceData && !m.imageData && (
+                                <button
+                                  onClick={() => startEditing(m)}
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center gap-2"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                  Edit
+                                </button>
+                              )}
+                              <button
+                                onClick={() => deleteMessage(m.id)}
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-muted text-red-500 flex items-center gap-2"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Delete
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -1305,7 +1439,7 @@ export default function MessagesPage() {
                   <div className="flex justify-start">
                     <div className="bg-muted rounded-2xl px-4 py-2.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">{otherUsername}</span>
+                        <span className="text-xs text-muted-foreground">{otherUsername} is typing</span>
                         <div className="flex gap-1">
                           <span className="w-1.5 h-1.5 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                           <span className="w-1.5 h-1.5 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />

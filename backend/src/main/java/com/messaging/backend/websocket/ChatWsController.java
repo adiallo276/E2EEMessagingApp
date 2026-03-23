@@ -89,6 +89,69 @@ public class ChatWsController {
         log.info("[ChatWs] Message broadcast complete");
     }
 
+    @MessageMapping("/chat.edit")
+    public void editMessage(EditMessageRequest req, Principal principal) {
+        if (principal == null) {
+            throw new RuntimeException("Unauthenticated STOMP session");
+        }
+
+        String username = principal.getName();
+        Message message = messages.findById(req.messageId)
+                .orElseThrow(() -> new RuntimeException("Message not found"));
+
+        if (!message.getSender().getUsername().equals(username)) {
+            throw new RuntimeException("You can only edit your own messages");
+        }
+
+        if (message.isDeleted()) {
+            throw new RuntimeException("Cannot edit a deleted message");
+        }
+
+        Conversation conversation = message.getConversation();
+        if (!conversation.hasParticipant(username)) {
+            throw new RuntimeException("Forbidden");
+        }
+
+        message.setContent(req.content);
+        message.setEdited(true);
+        message.setEditedAt(Instant.now());
+        Message saved = messages.save(message);
+
+        broker.convertAndSend(
+                "/topic/conversations/" + conversation.getId() + "/edit",
+                toDto(saved));
+    }
+
+    @MessageMapping("/chat.delete")
+    public void deleteMessage(DeleteMessageRequest req, Principal principal) {
+        if (principal == null) {
+            throw new RuntimeException("Unauthenticated STOMP session");
+        }
+
+        String username = principal.getName();
+        Message message = messages.findById(req.messageId)
+                .orElseThrow(() -> new RuntimeException("Message not found"));
+
+        if (!message.getSender().getUsername().equals(username)) {
+            throw new RuntimeException("You can only delete your own messages");
+        }
+
+        Conversation conversation = message.getConversation();
+        if (!conversation.hasParticipant(username)) {
+            throw new RuntimeException("Forbidden");
+        }
+
+        message.setDeleted(true);
+        message.setContent(null);
+        message.setIvB64(null);
+        message.setCiphertextB64(null);
+        Message saved = messages.save(message);
+
+        broker.convertAndSend(
+                "/topic/conversations/" + conversation.getId() + "/delete",
+                toDto(saved));
+    }
+
     private MessageDto toDto(Message m) {
         MessageDto d = new MessageDto();
         d.id = m.getId();

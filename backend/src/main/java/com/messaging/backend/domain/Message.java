@@ -64,10 +64,17 @@ public class Message {
     public String getCiphertextB64() { return ciphertextB64; }
     public void setCiphertextB64(String ciphertextB64) { this.ciphertextB64 = ciphertextB64; }
     public Instant getTimestamp() { return timestamp; }
+
     public boolean isEdited() { return edited; }
     public void setEdited(boolean edited) { this.edited = edited; }
+
     public Instant getEditedAt() { return editedAt; }
     public void setEditedAt(Instant editedAt) { this.editedAt = editedAt; }
+
     public boolean isDeleted() { return deleted; }
     public void setDeleted(boolean deleted) { this.deleted = deleted; }
+
+    public void setContent(String content) { this.content = content; }
+    public void setIvB64(String ivB64) { this.ivB64 = ivB64; }
+    public void setCiphertextB64(String ciphertextB64) { this.ciphertextB64 = ciphertextB64; }
 }
