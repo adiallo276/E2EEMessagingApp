@@ -178,9 +178,6 @@ All cryptographic operations occur client-side. The server only sees ciphertexts
 - `/app/e2ee.hello` - Initiate key exchange
 - `/app/e2ee.key` - Complete key exchange
 
-## License
-
-This project was developed as a Final Year Project at University of Birmingham.
 
 ## Author
 
