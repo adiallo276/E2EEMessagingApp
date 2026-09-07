@@ -182,5 +182,4 @@ All cryptographic operations occur client-side. The server only sees ciphertexts
 ## Author
 
 Abdoulahi Diallo  
-Supervised by: Pieter Joubert  
 2025-2026
