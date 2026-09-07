@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2026.2.26)  25 MAR 2026 13:32
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2026.2.26)  4 JUN 2026 00:29
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -780,24 +780,24 @@ File: l3backend-pdftex.def 2024-05-08 L3 backend support: PDF output (pdfTeX)
 ) (./Report.aux)
 \openout1 = `Report.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 39.
-LaTeX Font Info:    ... okay on input line 39.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 40.
+LaTeX Font Info:    ... okay on input line 40.
 
 *geometry* driver: auto-detecting
 *geometry* detected driver: pdftex
@@ -858,20 +858,25 @@ File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Liv
 e
 ))
 \c@lstlisting=\count342
-Package hyperref Info: Link coloring OFF on input line 39.
+Package hyperref Info: Link coloring OFF on input line 40.
  (./Report.out) (./Report.out)
 \@outlinefile=\write4
 \openout4 = `Report.out'.
 
 Package caption Info: Begin \AtBeginDocument code.
 Package caption Info: End \AtBeginDocument code.
-LaTeX Font Info:    Trying to load font information for U+msa on input line 41.
+<uob_crest_only.png, id=147, 401.5pt x 401.5pt>
+File: uob_crest_only.png Graphic file (type png)
+<use uob_crest_only.png>
+Package pdftex.def Info: uob_crest_only.png  used on input line 42.
+(pdftex.def)             Requested size: 81.5309pt x 81.52997pt.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 42.
 
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 41.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 42.
 
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/amsfonts/umsb.fd
@@ -880,14 +885,15 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 
 [1
 
-{/usr/local/texlive/2025basic/texmf-var/fonts/map/pdftex/updmap/pdftex.map}]
+{/usr/local/texlive/2025basic/texmf-var/fonts/map/pdftex/updmap/pdftex.map} <./
+uob_crest_only.png>]
 
 [2]
 
 [3]
 
 [4]
-Overfull \hbox (37.88722pt too wide) in paragraph at lines 212--213
+Overfull \hbox (37.88722pt too wide) in paragraph at lines 213--214
  [][] 
  []
 
@@ -895,9 +901,9 @@ Overfull \hbox (37.88722pt too wide) in paragraph at lines 212--213
 
 [5]
 LaTeX Font Info:    Font shape `OT1/cmtt/bx/n' in size <10.95> not available
-(Font)              Font shape `OT1/cmtt/m/n' tried instead on input line 223.
+(Font)              Font shape `OT1/cmtt/m/n' tried instead on input line 224.
 
-Overfull \hbox (4.67963pt too wide) in paragraph at lines 223--224
+Overfull \hbox (4.67963pt too wide) in paragraph at lines 224--225
 \OT1/cmr/m/n/10.95 aliases the par-ent buffer when the \OT1/cmtt/m/n/10.95 Uint
 8Array \OT1/cmr/m/n/10.95 is a view (com-mon with \OT1/cmtt/m/n/10.95 crypto.ge
 tRandomValues
@@ -912,7 +918,7 @@ tRandomValues
 [8]
 
 [9]
-Overfull \hbox (3.2523pt too wide) in paragraph at lines 413--414
+Overfull \hbox (3.2523pt too wide) in paragraph at lines 414--415
 \OT1/cmr/m/n/10.95 The Mini im-ple-men-ta-tions are not cryp-to-graph-i-cally s
 e-cure: pa-ram-e-ters are too small, JavaScript
  []
@@ -922,25 +928,25 @@ e-cure: pa-ram-e-ters are too small, JavaScript
 [10]
 
 [11]
-Underfull \hbox (badness 10000) in paragraph at lines 458--459
+Underfull \hbox (badness 10000) in paragraph at lines 459--460
 []\OT1/cmr/m/n/10.95 National In-sti-tute of Stan-dards and Tech-nol-ogy, ``Mod
 ule-Lattice-Based Key-
  []
 
 
-Underfull \hbox (badness 1590) in paragraph at lines 458--459
+Underfull \hbox (badness 1590) in paragraph at lines 459--460
 \OT1/cmr/m/n/10.95 Encapsulation Mech-a-nism Stan-dard (FIPS 203),'' U.S. De-pa
 rt-ment of Com-merce,
  []
 
 
-Underfull \hbox (badness 1152) in paragraph at lines 461--462
+Underfull \hbox (badness 1152) in paragraph at lines 462--463
 []\OT1/cmr/m/n/10.95 R. Avanzi et al., ``CRYSTALS-Kyber Al-go-rithm Spec-i-fi-c
 a-tions (Round 3),'' NIST
  []
 
 
-Underfull \hbox (badness 6016) in paragraph at lines 461--462
+Underfull \hbox (badness 6016) in paragraph at lines 462--463
 \OT1/cmr/m/n/10.95 PQC Stan-dard-iza-tion, 2021. Avail-able: []$\OT1/cmtt/m/n/1
 0.95 https : / / pq-[]crystals . org / kyber / data /
  []
@@ -956,10 +962,10 @@ Package rerunfilecheck Info: File `Report.out' has not changed.
 (rerunfilecheck)             Checksum: 71F73E4E273486CDBC3B11B710E6623A;7282.
  ) 
 Here is how much of TeX's memory you used:
- 26333 strings out of 474662
- 505955 string characters out of 5751109
- 919376 words of memory out of 5000000
- 48883 multiletter control sequences out of 15000+600000
+ 26340 strings out of 474662
+ 506129 string characters out of 5751109
+ 919423 words of memory out of 5000000
+ 48890 multiletter control sequences out of 15000+600000
  572816 words of font info for 89 fonts, out of 8000000 for 9000
  319 hyphenation exceptions out of 8191
  84i,10n,87p,1297b,776s stack positions out of 10000i,1000n,20000p,200000b,200000s
@@ -983,10 +989,10 @@ exmf-dist/fonts/type1/public/amsfonts/cm/cmsy9.pfb></usr/local/texlive/2025basi
 c/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/local/texlive/2025
 basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/local/texlive/
 2025basic/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
-Output written on Report.pdf (12 pages, 302971 bytes).
+Output written on Report.pdf (12 pages, 402990 bytes).
 PDF statistics:
- 383 PDF objects out of 1000 (max. 8388607)
- 324 compressed objects within 4 object streams
+ 386 PDF objects out of 1000 (max. 8388607)
+ 325 compressed objects within 4 object streams
  73 named destinations out of 1000 (max. 500000)
- 293 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 298 words of extra memory for PDF output out of 10000 (max. 10000000)
 

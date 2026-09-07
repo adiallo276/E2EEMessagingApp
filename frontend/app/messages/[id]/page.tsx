@@ -170,9 +170,7 @@ export default function MessagesPage() {
   const [contextMenuMessageId, setContextMenuMessageId] = useState<number | null>(null);
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Edit & delete state
-  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
-  const [editContent, setEditContent] = useState<string>("");
+
 
   // Typing & read receipts
   const [otherUserTyping, setOtherUserTyping] = useState<boolean>(false);

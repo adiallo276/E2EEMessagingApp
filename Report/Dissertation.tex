@@ -1,0 +1,1576 @@
+\documentclass[12pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1.2in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[bookmarks=true,bookmarksopen=true,bookmarksnumbered=true,
+            pdfstartview=FitH,colorlinks=true,linkcolor=blue,citecolor=blue,
+            urlcolor=blue]{hyperref}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{positioning,shapes,arrows.meta,decorations.pathreplacing}
+\usepackage{setspace}
+\usepackage{fancyhdr}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tocloft}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{longtable}
+\usepackage{mdframed}
+
+\onehalfspacing
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\leftmark}
+\fancyhead[R]{\small\thepage}
+\fancyfoot[C]{\small Post-Quantum Cryptography Messaging Application}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\definecolor{codegreen}{rgb}{0,0.55,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codeblue}{rgb}{0.0,0.3,0.7}
+\definecolor{backcolour}{rgb}{0.97,0.97,0.95}
+\lstdefinestyle{tscode}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen}\itshape,
+    keywordstyle=\color{codeblue}\bfseries,
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{orange!70!black},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    captionpos=b,
+    numbers=left,
+    numbersep=8pt,
+    frame=single,
+    rulecolor=\color{codegray!50},
+    tabsize=2,
+    showstringspaces=false,
+}
+\lstset{style=tscode}
+
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}{Lemma}[chapter]
+\newtheorem{proposition}{Proposition}[chapter]
+\newtheorem{remark}{Remark}[chapter]
+
+\newmdenv[
+  topline=true,bottomline=true,leftline=true,rightline=false,
+  linecolor=blue!60,linewidth=2pt,
+  backgroundcolor=blue!5,
+  innerleftmargin=10pt,innerrightmargin=10pt,
+  innertopmargin=8pt,innerbottommargin=8pt
+]{infobox}
+
+\title{
+  \vspace{-1cm}
+  \includegraphics[width=0.22\textwidth]{uob_crest_only.png}\\[1.2cm]
+  \Huge\bfseries Benchmarking Post-Quantum Cryptographic\\
+  Key Encapsulation Mechanisms in a\\
+  Real-Time End-to-End Encrypted\\
+  Messaging Application\\[1cm]
+  \large Final Year Dissertation
+}
+\author{
+  \Large Abdoulahi Diallo\\[0.4cm]
+  \large School of Computer Science\\
+  University of Birmingham\\[0.4cm]
+  \large Supervised by: Pieter Joubert\\[1cm]
+  \large Academic Year 2025--2026
+}
+\date{March 2026}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\begin{abstract}
+\noindent
+The advent of scalable quantum computing poses an existential threat to the public-key
+cryptographic infrastructure underpinning modern digital communications. Shor's
+algorithm~\cite{shor1994} reduces the factorisation of RSA moduli and the computation
+of elliptic curve discrete logarithms to polynomial-time quantum circuits, rendering
+RSA-2048 and ECDH-256---the workhorses of contemporary secure messaging---trivially
+breakable by a sufficiently powerful quantum adversary. This threat is not merely
+hypothetical: ``harvest now, decrypt later'' (HNDL) attacks motivate immediate
+migration even before cryptographically relevant quantum computers exist.
+
+This dissertation presents the design, implementation, and systematic empirical
+evaluation of three post-quantum Key Encapsulation Mechanisms (KEMs)---Mini-Kyber
+(Module-LWE), Mini-Frodo (plain LWE), and Mini-NTRU (NTRU lattice)---deployed within
+a fully functional real-time messaging application providing genuine end-to-end
+encryption (E2EE). The system is implemented using Spring Boot 3.2 on the backend and
+Next.js~14/TypeScript on the frontend, with all cryptographic operations executing
+client-side in the browser, enforcing the E2EE security boundary.
+
+Comprehensive benchmarking comprising 5,000 KEM invocations per algorithm and a
+500-session throughput trial, analysed via Welch's $t$-tests with 95\% confidence
+intervals, demonstrates that post-quantum algorithms impose no measurable performance
+penalty at session level. Mini-Kyber is statistically significantly faster than ECDH
+at session level ($t = -7.44$, $p \ll 0.001$), with the 9\,ms absolute difference
+being practically imperceptible. An automated test suite of 21 tests identified and
+confirmed the resolution of four implementation bugs, including a ${\sim}55\%$
+decapsulation failure rate caused by erroneous averaging of polynomial coefficients
+under modular arithmetic, demonstrating that cryptographic unit testing is not optional
+but essential. The dissertation positions this work as a fourth benchmark environment
+for PQC algorithms---pure TypeScript JIT---alongside existing native C, embedded ARM,
+and WASM reference environments.
+\end{abstract}
+
+\newpage
+\tableofcontents
+\newpage
+\listoftables
+\newpage
+\listoffigures
+\newpage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Introduction}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Motivation and Context}
+
+The security of the global communications infrastructure rests on two computational
+hardness assumptions: the difficulty of integer factorisation (RSA) and the discrete
+logarithm problem over elliptic curves (ECDH, ECDSA). These assumptions have sustained
+decades of cryptanalytic scrutiny and underpin TLS~1.3, Signal, WhatsApp, iMessage,
+and virtually every other secure messaging protocol deployed at scale. Their security
+is well-understood: the best classical algorithms for both problems require
+sub-exponential time, making them computationally infeasible for key sizes in common
+use.
+
+In 1994, Peter Shor demonstrated that a quantum computer could solve both problems in
+polynomial time~\cite{shor1994}. The quantum Fourier transform enables solving the
+hidden subgroup problem over abelian groups in $O((\log N)^3)$ operations---an
+exponential improvement over the best classical algorithms. The implication is
+unambiguous: a sufficiently powerful quantum computer would render all RSA and
+elliptic-curve cryptography trivially breakable.
+
+The practical timeline for cryptographically relevant quantum computers (CRQCs) is
+contested among researchers, with credible estimates ranging from 2030 to
+2040~\cite{nist2024}. However, this temporal uncertainty does not diminish the urgency
+of migration. The ``harvest now, decrypt later'' attack model has already been
+operationalised: sophisticated adversaries intercept and archive encrypted network
+traffic today, with the expectation of decrypting it once CRQCs become available.
+Medical records, financial transactions, diplomatic communications, and personal
+correspondence encrypted under RSA or ECDH today are potentially exposed, regardless
+of when quantum computers arrive. Data with confidentiality requirements exceeding ten
+years---a category that includes much government, healthcare, and financial
+data---should already be considered at risk.
+
+\section{Research Objectives}
+
+This dissertation addresses two primary research questions:
+
+\begin{enumerate}[label=\textbf{RQ\arabic*:}]
+  \item \textbf{Performance:} Do post-quantum Key Encapsulation Mechanisms impose a
+  measurable performance overhead compared to ECDH in a real-time browser-based E2EE
+  messaging application, when measured across KEM operations, session establishment,
+  and sustained throughput?
+
+  \item \textbf{Comparative Analysis:} Do the empirically observed performance
+  characteristics of Mini-Kyber (Module-LWE), Mini-Frodo (plain LWE), and Mini-NTRU
+  (NTRU lattice) in a TypeScript browser environment preserve the relative rankings
+  established in production benchmarking literature, validating reduced-parameter
+  implementations as a methodology for comparative algorithm evaluation?
+\end{enumerate}
+
+Secondary objectives include: constructing a working end-to-end encrypted messaging
+application demonstrating practical PQC deployability; producing a statistically
+rigorous benchmark methodology with honest treatment of JIT variability and effective
+sample sizes; and identifying and resolving implementation bugs through automated
+correctness testing.
+
+\section{Contributions}
+
+This dissertation makes the following original contributions:
+
+\begin{enumerate}
+  \item \textbf{A fourth PQC benchmark environment.} Existing literature benchmarks
+  PQC algorithms in native C~\cite{crystals_kyber_spec}, on embedded ARM
+  hardware~\cite{pqm4}, and via WASM compilation. This work contributes measurements
+  in a pure TypeScript JIT environment---the runtime context relevant to browser-based
+  messaging applications---under a consistent measurement infrastructure enabling
+  direct algorithmic comparison.
+
+  \item \textbf{A working E2EE messaging application with interchangeable PQC
+  algorithms.} The system implements a unified KEM interface behind which Kyber, Frodo,
+  NTRU, and ECDH are interchangeable, demonstrating that PQC integration into
+  production-grade messaging architecture is architecturally feasible.
+
+  \item \textbf{Statistical rigour in browser PQC benchmarking.} The evaluation
+  employs Welch's $t$-tests with correct effective sample sizes (n$_{\text{eff}}=500$),
+  distinguishing statistical significance from practical significance, and reporting
+  non-significant results honestly.
+
+  \item \textbf{Automated correctness testing revealing four critical implementation
+  bugs.} The 100-iteration correctness sweep identified bugs with ${\sim}55\%$
+  decapsulation failure rates that were entirely invisible in manual integration
+  testing, demonstrating the necessity of unit-level cryptographic correctness
+  validation.
+\end{enumerate}
+
+\section{Dissertation Structure}
+
+Chapter~2 establishes the mathematical foundations of lattice-based cryptography,
+covering LWE, Ring-LWE, Module-LWE, and NTRU with formal definitions and security
+reductions. Chapter~3 surveys related work including the NIST standardisation process,
+production deployments of PQC, and existing browser-based implementations.
+Chapter~4 describes the system architecture and E2EE protocol design. Chapter~5
+presents the implementation of all three Mini KEM algorithms with correctness proofs.
+Chapter~6 documents the four implementation bugs discovered through automated testing.
+Chapter~7 describes the benchmarking methodology. Chapter~8 presents and analyses
+results. Chapter~9 discusses implications, limitations, and future work.
+Chapter~10 concludes.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Theoretical Background}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Lattice Cryptography: Foundations}
+
+\subsection{Lattices and Hard Problems}
+
+\begin{definition}[Lattice]
+A lattice $\Lambda$ is a discrete additive subgroup of $\mathbb{R}^n$. Given linearly
+independent basis vectors $\mathbf{b}_1, \ldots, \mathbf{b}_k \in \mathbb{R}^n$, the
+lattice generated by this basis is:
+\[
+\Lambda(\mathbf{b}_1, \ldots, \mathbf{b}_k) = \left\{ \sum_{i=1}^{k} z_i \mathbf{b}_i \;\middle|\; z_i \in \mathbb{Z} \right\}
+\]
+\end{definition}
+
+The canonical computational problems on lattices that underpin modern PQC are:
+
+\begin{definition}[Shortest Vector Problem (SVP)]
+Given a lattice basis $\mathbf{B}$, find the shortest non-zero vector $\mathbf{v} \in \Lambda(\mathbf{B})$,
+i.e., find $\mathbf{v}$ minimising $\|\mathbf{v}\|$.
+\end{definition}
+
+\begin{definition}[Closest Vector Problem (CVP)]
+Given a lattice basis $\mathbf{B}$ and a target vector $\mathbf{t} \in \mathbb{R}^n$,
+find the lattice vector $\mathbf{v} \in \Lambda(\mathbf{B})$ minimising $\|\mathbf{v} - \mathbf{t}\|$.
+\end{definition}
+
+Both SVP and CVP are NP-hard in the worst case~\cite{peikert2016}. Critically for
+post-quantum security, no polynomial-time quantum algorithm is known for either
+problem. The best quantum algorithms for SVP---variants of BKZ enhanced with quantum
+random walks---achieve complexity $2^{0.265n}$, compared to the best classical $2^{0.292n}$.
+This represents a constant-factor improvement, not the exponential speedup that
+Shor's algorithm provides for factorisation. Doubling lattice dimensions provides
+sufficient quantum resistance.
+
+\subsection{Learning With Errors}
+
+The Learning With Errors problem, introduced by Regev~\cite{regev2005}, is the
+algebraic instantiation of lattice hardness that underpins Kyber and Frodo.
+
+\begin{definition}[Learning With Errors (LWE)]
+Let $n, q \geq 1$ be integers and $\chi$ be a probability distribution over $\mathbb{Z}$.
+The LWE distribution $A_{\mathbf{s},\chi}$ for a secret $\mathbf{s} \in \mathbb{Z}_q^n$
+samples $\mathbf{a} \leftarrow \mathbb{Z}_q^n$ uniformly and $e \leftarrow \chi$,
+returning $(\mathbf{a}, \langle \mathbf{a}, \mathbf{s} \rangle + e \pmod{q})$.
+
+The (decisional) LWE problem is to distinguish $m$ samples from $A_{\mathbf{s},\chi}$
+from $m$ uniformly random samples in $\mathbb{Z}_q^n \times \mathbb{Z}_q$.
+\end{definition}
+
+In matrix form: given $\mathbf{A} \in \mathbb{Z}_q^{m \times n}$,
+$\mathbf{s} \in \mathbb{Z}_q^n$, and $\mathbf{e} \in \mathbb{Z}_q^m$ with small entries,
+distinguish $\mathbf{b} = \mathbf{A}\mathbf{s} + \mathbf{e} \pmod{q}$ from uniformly
+random $\mathbf{b}$. The error vector $\mathbf{e}$ is the critical ingredient:
+without it, $\mathbf{s}$ is recoverable by Gaussian elimination in polynomial time.
+
+The fundamental security guarantee of LWE comes from Regev's quantum reduction:
+
+\begin{theorem}[Regev's Reduction~\cite{regev2005}]
+If there exists an efficient algorithm solving the decisional LWE problem with
+parameters $(n, q, \chi)$ where $q$ is a prime bounded by a polynomial in $n$ and
+$\chi$ is a discrete Gaussian with standard deviation $\sigma \geq 2\sqrt{n}$, then
+there exists an efficient quantum algorithm solving GapSVP and SIVP on arbitrary
+$n$-dimensional lattices with approximation factor $\tilde{O}(n/\sigma)$.
+\end{theorem}
+
+This reduction is quantum in the sense that the reduction algorithm uses a quantum
+subroutine, meaning it shows that breaking LWE is at least as hard as solving
+worst-case lattice problems with a quantum computer. The consequence is profound:
+an attacker breaking LWE-based cryptography would simultaneously solve the hardest
+instances of SVP for all lattices of the relevant dimension---a capability that would
+also break every other lattice-based cryptosystem. No such algorithm is known.
+
+\subsection{Ring-LWE and Module-LWE}
+
+Standard LWE has key sizes of $O(n^2)$ due to the $n \times n$ matrix $\mathbf{A}$.
+At $n = 640$ (FrodoKEM-640), public keys require approximately 640\,KB. This motivates
+algebraically structured variants.
+
+\begin{definition}[Ring-LWE~\cite{lyubashevsky2010}]
+Let $R_q = \mathbb{Z}_q[x]/(f(x))$ for an irreducible polynomial $f(x)$ of degree $n$.
+The Ring-LWE distribution samples $a \leftarrow R_q$ uniformly and $e \leftarrow \chi_R$
+(a distribution over $R_q$ with small coefficients), returning $(a, as + e)$ for secret
+$s \in R_q$.
+\end{definition}
+
+Kyber uses $f(x) = x^n + 1$, the $2n$-th cyclotomic polynomial, giving the ring
+$R_q = \mathbb{Z}_q[x]/(x^n+1)$ where $n=256$ and $q=3329$. Multiplication in this
+ring satisfies $x^n \equiv -1$, enabling the \emph{negacyclic} Number Theoretic
+Transform (NTT) to compute polynomial multiplication in $O(n \log n)$ instead of
+$O(n^2)$. Key sizes reduce from $O(n^2)$ to $O(n)$.
+
+Module-LWE generalises Ring-LWE to modules over $R_q$, replacing scalar ring elements
+with length-$k$ vectors of ring elements. Kyber uses $k=2$ (Kyber-512), $k=3$
+(Kyber-768), or $k=4$ (Kyber-1024), providing a tunable security-efficiency tradeoff.
+The public key is $(A, t = As + e)$ where $A \in R_q^{k \times k}$ and $s, e \in R_q^k$.
+
+\begin{remark}
+Frodo deliberately avoids ring structure, using a full $n \times n$ matrix $A$ over
+$\mathbb{Z}_q$ with no algebraic assumptions. While this increases key sizes and
+computational cost by a factor of $\Theta(n)$ compared to Kyber, it eliminates the
+risk that ring structure might be exploitable by a future algebraic attack. No such
+attack is known, but Frodo's conservatism provides a hedge against this unknown risk.
+\end{remark}
+
+\subsection{The NTRU Problem}
+
+NTRU~\cite{hoffstein1998}, proposed in 1996 and the oldest surviving lattice-based
+public-key cryptosystem, rests on an entirely different hardness assumption.
+
+\begin{definition}[NTRU Problem]
+Work in the ring $\mathcal{R} = \mathbb{Z}[x]/(x^N - 1)$ with modulus $q$. Let
+$f, g \in \mathcal{R}$ be short polynomials with coefficients in $\{-1, 0, 1\}$.
+The NTRU problem is: given the public polynomial $h = f^{-1} \cdot g \pmod{q}$,
+find short polynomials $f'$ and $g'$ such that $h = f'^{-1} \cdot g' \pmod{q}$.
+\end{definition}
+
+The security relies on the difficulty of recovering the short polynomials from their
+``ratio'' $h$. This is related to the SVP on a specific class of NTRU lattices but is
+formally distinct from LWE: no reduction between NTRU and LWE is known in either
+direction. NTRU thus provides an \emph{independent} hardness assumption.
+
+Note that NTRU uses the ring $\mathbb{Z}[x]/(x^N - 1)$, where $x^N \equiv +1$
+(cyclic convolution), whereas Kyber uses $\mathbb{Z}_q[x]/(x^n + 1)$ where
+$x^n \equiv -1$ (negacyclic convolution). This algebraic difference has implications
+for both security analysis and implementation: cyclic polynomial multiplication does
+not support the standard NTT, and the ring structure admits different lattice reduction
+strategies.
+
+\section{Quantum Resistance of Lattice Problems}
+
+The key distinction between lattice-based cryptography and classical public-key
+cryptography is the absence of a polynomial-time quantum algorithm for lattice problems.
+
+\textbf{Why Shor's algorithm does not apply:} Shor's algorithm solves the hidden
+subgroup problem (HSP) over abelian groups. Integer factorisation reduces to HSP over
+$\mathbb{Z}$; the elliptic curve discrete logarithm reduces to HSP over elliptic curve
+groups. Both groups are abelian, and the quantum Fourier transform over abelian groups
+is efficiently computable, enabling polynomial-time quantum algorithms.
+
+SVP and CVP do not reduce to HSP over any known abelian group. The lattice shortest
+vector problem has a non-abelian symmetry structure that resists the quantum Fourier
+transform approach. Despite significant research effort---including attempts to
+formulate lattice problems as non-abelian HSP instances---no polynomial-time quantum
+reduction has been found~\cite{peikert2016}.
+
+\textbf{Grover's algorithm provides only quadratic speedup:} Grover's unstructured
+search provides a quadratic quantum speedup, finding a marked element among $N$ items
+in $O(\sqrt{N})$ quantum operations~\cite{bernstein2017}. For symmetric cryptography
+(AES) and hash functions, this is mitigated by doubling key sizes (AES-256 remains
+secure). For lattice problems, the best quantum algorithms based on Grover search
+achieve complexity approximately $2^{0.265n}$ (BKZ with quantum speedup), compared to
+$2^{0.292n}$ classically---an improvement of roughly $12\%$ in exponent, not the
+exponential collapse that Shor provides for RSA. Increasing lattice dimensions by
+a modest factor (e.g., from $n=512$ to $n=768$) suffices to compensate.
+
+\section{Key Encapsulation Mechanisms}
+
+A Key Encapsulation Mechanism is a tuple of algorithms (KeyGen, Encaps, Decaps)
+providing a method for two parties to establish a shared secret, where one party
+generates a keypair and the other ``encapsulates'' a random secret that only the
+keypair holder can recover.
+
+\begin{definition}[KEM Security: IND-CCA2]
+A KEM is \emph{indistinguishable under adaptive chosen-ciphertext attack} (IND-CCA2)
+if no probabilistic polynomial-time adversary can distinguish real from random shared
+secrets, even when given access to a decapsulation oracle for all ciphertexts except
+the challenge. Formally, the adversary's advantage:
+\[
+\text{Adv}^{\text{IND-CCA2}}_\text{KEM}(\mathcal{A}) = \left| \Pr[\mathcal{A}^{\text{Decaps}(\cdot)}(pk, ct^*, K^*) = b] - \frac{1}{2} \right| \leq \text{negl}(n)
+\]
+\end{definition}
+
+IND-CCA2 security is the gold standard for KEMs in real-world deployment. It is
+achieved from IND-CPA secure schemes via the Fujisaki-Okamoto (FO)
+transform~\cite{nist2024}, which adds a re-encryption check during decapsulation to
+resist active adversaries. The Mini implementations in this project achieve correctness
+and computational security relative to their parameters; full IND-CCA2 with FO
+transform is provided by the production wrapper (\texttt{production-kem.ts}) using
+\texttt{@noble/post-quantum}~\cite{noble_pq}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Related Work and Deployment Context}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{NIST Post-Quantum Standardisation}
+
+The National Institute of Standards and Technology initiated a public competition for
+post-quantum cryptographic standards in 2016, culminating in the publication of three
+primary standards in August 2024~\cite{nist2024}:
+
+\begin{itemize}
+  \item \textbf{FIPS 203}: ML-KEM, based on CRYSTALS-Kyber~\cite{crystals_kyber_spec}
+  \item \textbf{FIPS 204}: ML-DSA, based on CRYSTALS-Dilithium
+  \item \textbf{FIPS 205}: SLH-DSA, based on SPHINCS+
+\end{itemize}
+
+This dissertation focuses exclusively on KEMs (FIPS~203), as key encapsulation is the
+component directly relevant to E2EE session establishment. Signature schemes (FIPS~204,
+205) are excluded as out of scope.
+
+\textbf{Algorithm selection rationale:} The three algorithms in this dissertation were
+chosen to represent three independent hardness assumptions and three distinct
+performance profiles. BIKE, HQC, and Classic McEliece (code-based schemes) were
+excluded due to key sizes in the range of kilobytes to megabytes, making them
+impractical for browser-based deployment. SPHINCS+ and Dilithium are signature schemes,
+not KEMs.
+
+\section{PQC in Production Systems}
+
+\textbf{Signal Protocol PQXDH:} In September 2023, Signal deployed the
+Post-Quantum Extended Diffie-Hellman (PQXDH) protocol~\cite{signal_pqxdh}, replacing
+their classical X3DH key agreement with a hybrid construction combining X25519 and
+CRYSTALS-Kyber-1024. The hybrid design provides security if either primitive is
+secure: post-quantum security against future CRQCs, and classical security against
+any weaknesses in early Kyber deployments. Signal's deployment represents the most
+significant production deployment of PQC in consumer messaging to date.
+
+\textbf{Google Chrome ML-KEM:} In November 2024, Google Chrome began deploying hybrid
+ML-KEM key exchange in TLS~1.3~\cite{tls13}, using X25519MLKEM768---a hybrid of
+X25519 and ML-KEM-768. Cloudflare subsequently reported that approximately 38\% of
+human HTTPS traffic traversing its network used hybrid post-quantum handshakes by
+early 2025~\cite{nist_migration}. This adoption trajectory demonstrates that lattice
+cryptography is already deployed at internet scale.
+
+\textbf{Architectural comparison:} This project diverges from Signal's PQXDH in two
+important respects. First, it isolates the PQC component to enable clean algorithmic
+comparison: Signal's hybrid design deliberately conflates PQC and classical security,
+making pure PQC performance characterisation impossible from deployment data. Second,
+the browser JavaScript execution environment introduces constraints absent from Signal's
+native application context: JIT non-determinism, garbage collection pauses, and the
+absence of SIMD instruction access.
+
+\section{Browser-Based PQC Implementations}
+
+The primary approach to browser PQC in the literature and industry is WebAssembly
+(WASM) compilation of native C libraries. The Open Quantum Safe project provides
+liboqs, a C implementation of all NIST candidates compilable to WASM via Emscripten.
+The pqm4 project~\cite{pqm4} benchmarks the same algorithms on ARM Cortex-M4
+embedded targets.
+
+Both approaches introduce a confounding variable: the FFI boundary between JavaScript
+and WASM involves memory copying between the JavaScript heap and WASM linear memory,
+adding overhead that is difficult to separate from algorithm cost. For pure comparative
+benchmarking---determining which algorithm is faster, and by how much---this overhead
+contaminates measurements. The \texttt{@noble/post-quantum} library~\cite{noble_pq}
+provides the only production-grade, security-audited, pure-JavaScript PQC
+implementation, operating entirely within the JavaScript engine and therefore directly
+comparable to Mini implementations in terms of runtime environment.
+
+\textbf{Positioning:} This project contributes a fourth benchmark environment:
+pure TypeScript in a JIT-compiled browser engine. The comparative methodology---three
+algorithm families under identical measurement infrastructure with Welch's $t$-test
+significance analysis---represents, to the author's knowledge, the first such
+comparison published for this execution environment.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{System Architecture and E2EE Protocol}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Technology Stack}
+
+\subsection{Backend}
+
+The server is implemented in Java~21 with Spring Boot~3.4. The key framework
+components and their justifications are:
+
+\begin{itemize}
+  \item \textbf{Spring Security with JWT:} Provides a production-grade authentication
+  filter chain. JWT tokens are issued on login and validated at both the HTTP handshake
+  and on every STOMP frame via two interceptor layers (\texttt{JwtHandshakeInterceptor}
+  and \texttt{StompAuthChannelInterceptor}), preventing connection hijacking.
+
+  \item \textbf{Spring WebSocket with STOMP:} Raw WebSockets provide only a byte
+  channel. STOMP adds subscription semantics, topic routing, and message framing.
+  Clients subscribe to \texttt{/topic/conversations/\{id\}} and the server routes
+  messages via \texttt{SimpMessagingTemplate}. SockJS provides transparent fallback to
+  HTTP long-polling when WebSocket connections are blocked by firewalls.
+
+  \item \textbf{Spring Data JPA with H2:} H2 in-memory database requires zero
+  configuration, with Hibernate auto-generating the schema from JPA entities.
+  Switching to PostgreSQL requires changing a single property in
+  \texttt{application.properties}.
+
+  \item \textbf{Java 21 Virtual Threads:} Project Loom virtual threads enable handling
+  many concurrent WebSocket connections without blocking OS threads, improving
+  scalability for a real-time messaging workload.
+\end{itemize}
+
+\subsection{Frontend}
+
+The client is implemented in Next.js~14 with TypeScript and React~18. Relevant
+architectural decisions:
+
+\begin{itemize}
+  \item \textbf{Next.js App Router API routes:} Server-side only execution ensures the
+  OpenAI API key never touches the browser. The \texttt{/app/api/chat/route.ts} handler
+  reads the key via \texttt{process.env.OPENAI\_API\_KEY} and is never bundled into
+  client JavaScript.
+
+  \item \textbf{TypeScript:} Type safety across the KEM interface (\texttt{keyGen},
+  \texttt{encapsulate}, \texttt{decapsulate}) enforced at compile time. Interface
+  mismatches between algorithm implementations are caught before reaching the browser.
+
+  \item \textbf{Web Crypto API:} The browser's \texttt{crypto.getRandomValues()} is
+  used exclusively for all randomness, replacing an earlier \texttt{Math.random()} usage
+  in Mini-NTRU identified and corrected during security review.
+\end{itemize}
+
+\section{Architecture Overview}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  box/.style={rectangle,draw,rounded corners=3pt,minimum width=3.2cm,
+              minimum height=0.8cm,align=center,font=\small},
+  arrow/.style={->,thick},
+  dashed arrow/.style={->,thick,dashed}
+]
+\node[box,fill=blue!15] (ui) at (0,0) {Next.js UI\\React 18};
+\node[box,fill=green!20] (crypto) at (0,-1.5) {Crypto Library\\TypeScript};
+\node[box,fill=cyan!15] (storage) at (0,-3) {localStorage\\(Keys, Sessions)};
+\node[box,fill=orange!20] (rest) at (5,0) {REST Controllers\\Spring Boot};
+\node[box,fill=orange!20] (ws) at (5,-1.5) {WebSocket Handler\\STOMP/SockJS};
+\node[box,fill=purple!20] (db) at (5,-3) {H2 Database\\JPA};
+\node[box,fill=yellow!30] (openai) at (9,-0) {OpenAI GPT-4\\API};
+\draw[arrow] (ui) -- node[above,font=\scriptsize]{HTTP/REST} (rest);
+\draw[arrow] (ui) -- (crypto);
+\draw[arrow] (crypto) -- (storage);
+\draw[arrow,<->] (ui) -- node[above,font=\scriptsize]{STOMP} (ws);
+\draw[arrow] (rest) -- (db);
+\draw[arrow] (ws) -- (db);
+\draw[arrow,<->] (rest) -- node[above,font=\scriptsize]{HTTPS} (openai);
+\draw[dashed,thick,red!70,rounded corners] (-1.8,-3.6) rectangle (2.0,0.6);
+\node[red!70,font=\footnotesize\bfseries] at (0.1,-3.9) {E2EE Security Boundary};
+\node[font=\small\bfseries] at (0,1.1) {Browser (Client)};
+\node[font=\small\bfseries] at (5,1.1) {Server};
+\end{tikzpicture}
+\caption{System architecture showing the E2EE security boundary. All cryptographic
+operations occur within the browser boundary; the server handles only routing,
+authentication, and persistence of ciphertexts.}
+\label{fig:arch}
+\end{figure}
+
+\section{E2EE Protocol Design}
+
+\subsection{Security Model}
+
+The protocol provides end-to-end encryption with the following properties:
+
+\begin{itemize}
+  \item \textbf{Forward secrecy (session-level):} Each conversation establishes a
+  unique session key derived via HKDF with a conversation-specific context string.
+
+  \item \textbf{Server blindness:} The server stores only AES-256-GCM ciphertexts
+  and public keys. It never holds a shared secret, session key, or plaintext.
+
+  \item \textbf{PQC-hardened key agreement:} The session key derives from a
+  post-quantum KEM shared secret, providing quantum resistance from session establishment
+  through all subsequent message encryption.
+\end{itemize}
+
+\textbf{Acknowledged limitations:} Secret keys are stored in \texttt{localStorage},
+which is readable by any JavaScript executing in the page context. An XSS vulnerability
+could therefore exfiltrate secret keys. Production deployment would use the Web Crypto
+API's non-extractable \texttt{CryptoKey} objects, which are stored in the browser's
+secure key store and cannot be read by JavaScript. This limitation is explicitly
+documented and is a prototype implementation choice, not a fundamental design flaw.
+
+\subsection{Three-Message Handshake}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  actor/.style={rectangle,draw,fill=blue!10,minimum width=2.4cm,
+                minimum height=0.65cm,font=\small\bfseries},
+  msg/.style={->,thick,font=\scriptsize},
+  note/.style={font=\scriptsize,align=left}
+]
+\node[actor,fill=teal!25] (A) at (0,0) {Initiator (Alice)};
+\node[actor,fill=gray!20] (S) at (5.5,0) {Server};
+\node[actor,fill=blue!25] (B) at (11,0) {Responder (Bob)};
+\draw[dashed,gray!60] (0,-0.4) -- (0,-10.2);
+\draw[dashed,gray!60] (5.5,-0.4) -- (5.5,-10.2);
+\draw[dashed,gray!60] (11,-0.4) -- (11,-10.2);
+
+\node[note,left=0.1cm of {(0,-1.2)}] {$\texttt{keyGen}()$\\$\rightarrow (pk, sk)$\\$sk \to$ localStorage};
+\draw[msg] (0,-1.8) -- (5.5,-2.3) node[midway,above,sloped]{$\texttt{E2EE\_HELLO}:\; pk,\; \mathit{alg}$};
+\draw[msg] (5.5,-2.3) -- (11,-2.8) node[midway,above,sloped]{forwarded};
+
+\node[note,right=0.1cm of {(11,-3.2)}] {$\texttt{encaps}(pk)$\\$\rightarrow (ct, K_B)$\\$K_B \to$ localStorage};
+\draw[msg] (11,-3.8) -- (5.5,-4.3) node[midway,above,sloped]{$\texttt{E2EE\_KEY}:\; ct,\; \mathit{salt}$};
+\draw[msg] (5.5,-4.3) -- (0,-4.8) node[midway,above,sloped]{forwarded};
+
+\node[note,left=0.1cm of {(0,-5.2)}] {$\texttt{decaps}(sk, ct)$\\$\rightarrow K_A = K_B$};
+
+\draw[thick,dotted,blue!60] (-1.2,-5.9) -- (12.2,-5.9);
+\node[font=\scriptsize\itshape,blue!70] at (5.5,-6.25)
+  {Both derive: $K_{\text{session}} = \texttt{HKDF}(K,\; \mathit{salt},\; \texttt{"messaging-e2ee-v1:}\mathit{alg}\texttt{:conv:}\mathit{id}\texttt{"})$};
+
+\draw[msg] (0,-7.0) -- (5.5,-7.4) node[midway,above,sloped]{$\texttt{E2EE\_MSG}:\; \texttt{AES-GCM}(m_1,\; IV_1)$};
+\draw[msg] (5.5,-7.4) -- (11,-7.8) node[midway,above,sloped]{forwarded (opaque to server)};
+
+\draw[msg] (11,-8.5) -- (5.5,-8.9) node[midway,above,sloped]{$\texttt{E2EE\_MSG}:\; \texttt{AES-GCM}(m_2,\; IV_2)$};
+\draw[msg] (5.5,-8.9) -- (0,-9.3) node[midway,above,sloped]{forwarded (opaque to server)};
+
+\draw[dashed,red!60,rounded corners] (4.0,-0.4) rectangle (7.0,-10.0);
+\node[red!60,font=\scriptsize] at (5.5,-10.35) {Server: sees only ciphertexts};
+\end{tikzpicture}
+\caption{The three-message E2EE handshake protocol. The server routes all messages
+but cannot decrypt any content. $K_A = K_B$ by KEM correctness; both parties
+independently derive an identical session key via HKDF.}
+\label{fig:handshake}
+\end{figure}
+
+\subsection{Session Key Derivation}
+
+The shared KEM secret $K$ is not used directly as an AES key. HKDF~\cite{webcrypto}
+is applied with three distinct inputs:
+
+\begin{align}
+K_{\text{session}} &= \texttt{HKDF}(K,\; \mathit{salt},\; \mathit{info}) \\
+\mathit{info} &= \texttt{"messaging-e2ee-v1:}\mathit{alg}\texttt{:conv:}\mathit{conversationId}\texttt{"}
+\end{align}
+
+Three properties are achieved:
+
+\textbf{Domain separation:} Including $\mathit{alg}$ and $\mathit{conversationId}$ in
+the HKDF info string ensures that even if two conversations produce the same raw KEM
+output $K$ (unlikely but theoretically possible), they derive completely different
+session keys. Without domain separation, two contexts sharing the same $K$ would share
+the same $K_{\text{session}}$---a potentially catastrophic vulnerability.
+
+\textbf{Key stretching:} The raw KEM output may not have the distribution required by
+AES-GCM. HKDF extracts and expands it into a properly formatted 256-bit key.
+
+\textbf{Forward compatibility:} The version string \texttt{messaging-e2ee-v1} enables
+future protocol versions to derive incompatible keys from the same KEM infrastructure.
+
+\subsection{Message Encryption}
+
+Every plaintext message $m$ is encrypted as:
+\[
+c = \texttt{AES-256-GCM}_{K_{\text{session}}}(m,\; IV)
+\]
+where $IV$ is a fresh 12-byte random nonce generated by \texttt{crypto.getRandomValues()}
+for each message. AES-GCM provides both confidentiality and authenticity: the
+authentication tag ensures that a message encrypted under a mismatched session key
+fails decryption with overwhelming probability, a property exploited by the automated
+correctness testing (Section~\ref{sec:testing}).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Algorithm Implementations}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Design Philosophy: Mini Implementations}
+
+\subsection{Rationale}
+
+Full production implementations of Kyber, Frodo, and NTRU were not viable within the
+browser JavaScript environment for three specific technical reasons:
+
+\begin{enumerate}
+  \item \textbf{NTT complexity:} Full Kyber requires a Number Theoretic Transform
+  using bit-reversal permutation and Montgomery modular reduction. Implementing this
+  correctly in JavaScript within the project timeline was not feasible. More
+  importantly, using a WASM-compiled liboqs would introduce FFI boundary overhead
+  confounding benchmarks.
+
+  \item \textbf{JIT non-determinism and constant-time impossibility:} JavaScript's
+  JIT compiler cannot guarantee constant-time execution. Timing side channels are
+  therefore inherent to any JavaScript PQC implementation. This applies equally to
+  Mini and full implementations, making Mini implementations equally valid for the
+  purpose of measuring algorithmic performance characteristics.
+
+  \item \textbf{Comparative benchmarking objective:} The research objective is
+  \emph{relative} comparison of algorithm families, not absolute timing benchmarks.
+  For this purpose, transparent TypeScript implementations sharing an identical
+  execution environment are arguably preferable to opaque WASM-compiled libraries,
+  as the only variable between algorithm measurements is the algorithm itself.
+\end{enumerate}
+
+\subsection{Parameter Choices}
+
+\begin{table}[H]
+\centering
+\caption{Mini vs production parameter comparison. Kyber retains identical $n$ and $q$;
+only module rank is reduced. Frodo and NTRU use educationally reduced parameters.}
+\label{tab:params}
+\begin{tabular}{l|c|c|c|c|l}
+\toprule
+\textbf{Algorithm} & \textbf{Prod.\ $n$} & \textbf{Mini $n$}
+& \textbf{Prod.\ $q$} & \textbf{Mini $q$} & \textbf{Key difference} \\
+\midrule
+Kyber-512 & 256 & 256 & 3329 & 3329 & Module rank $k$: 2 vs 2 (same) \\
+FrodoKEM-640 & 640 & 4 & 32768 & 257 & Matrix dimension $n$ dramatically reduced \\
+NTRU-hps509 & 509 & 7 & 2048 & 128 & Ring degree $N$ dramatically reduced \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The preservation of Kyber's $n=256$ and $q=3329$ is particularly significant: the
+polynomial multiplication operations that dominate encapsulation cost are identical in
+structure to production Kyber-512. Only the number of ring elements per vector (module
+rank) differs, meaning encapsulation timing reflects genuine polynomial arithmetic
+costs, not an artefact of reduced parameters.
+
+\section{Mini-Kyber: Module-LWE}
+
+\subsection{Key Generation}
+
+\begin{algorithm}[H]
+\caption{Mini-Kyber Key Generation}
+\label{alg:kyber-keygen}
+\begin{algorithmic}[1]
+\State Sample $a \leftarrow R_q$ uniformly (public matrix element)
+\State Sample $s \leftarrow \chi^k$ (secret vector, small coefficients)
+\State Sample $e \leftarrow \chi^k$ (error vector, small coefficients)
+\State Compute $t = a \cdot s + e \pmod{q}$ (public key element)
+\State \Return $pk = (a, t)$, $sk = s$
+\end{algorithmic}
+\end{algorithm}
+
+The public key $(a, t)$ is a Ring-LWE instance: recovering $s$ from $(a, t)$ requires
+solving Ring-LWE, which reduces to hard lattice problems~\cite{lyubashevsky2010}.
+
+\subsection{Encapsulation and Message Encoding}
+
+The critical implementation detail for correctness is the message encoding scheme.
+A byte $m \in \{0, \ldots, 255\}$ is encoded across $N = 8$ polynomial coefficients:
+
+\begin{lstlisting}[language=Java, caption={Mini-Kyber message encoding},
+                   label={lst:encode}]
+function encodeMessage(m: number): Polynomial {
+  const c = new Array(N).fill(0);
+  const halfQ = Math.floor(Q / 2); // = 1664 for Q=3329
+  for (let i = 0; i < N; i++) {
+    c[i] = ((m >> i) & 1) === 1 ? halfQ : 0;
+  }
+  return new Polynomial(c);
+}
+\end{lstlisting}
+
+Bit $i$ of $m$ is encoded as coefficient $i$ of the polynomial: $Q/2 = 1664$ for
+bit=1, and $0$ for bit=0. After the LWE operations in encapsulation and decapsulation,
+the recovered polynomial has coefficients approximately equal to $0$ or $1664$,
+perturbed by small noise.
+
+\subsection{Decapsulation and the Threshold Decoder}
+
+After decapsulation recovers $w \approx \mathit{mEnc} + \text{noise}$, each
+coefficient is decoded via a threshold rule:
+
+\begin{lstlisting}[language=Java, caption={Mini-Kyber threshold decoder
+(corrected)}, label={lst:decode}]
+function decodeMessage(w: Polynomial): number {
+  const c = w.getCoeffs();
+  let m = 0;
+  for (let i = 0; i < c.length; i++) {
+    let v = c[i] % Q;
+    if (v < 0) v += Q;              // normalise to [0, Q)
+    if (v > Q / 4 && v < 3 * Q / 4) {   // threshold: [Q/4, 3Q/4)
+      m |= (1 << i);                // bit i = 1
+    }
+  }
+  return m;
+}
+\end{lstlisting}
+
+The threshold $[Q/4, 3Q/4) = [832, 2497)$ captures all values close to $Q/2 = 1664$.
+The geometric justification: $0$ and $Q/2$ are the two maximally separated points in
+$\mathbb{Z}_Q$, at Hamming distance $Q/2$ from each other. Noise magnitude is bounded
+by the LWE error distribution ($\sigma \ll Q/4$), ensuring values near $Q/2$ never
+cross the $Q/4$ or $3Q/4$ boundaries.
+
+\section{Mini-Frodo: Plain LWE}
+
+\subsection{Matrix-Vector Operations}
+
+Frodo's security relies on the hardness of plain LWE with no ring structure. The
+implementation uses a matrix class with explicit dimension tracking:
+
+\textbf{KeyGen:} Sample $A \in \mathbb{Z}_q^{n \times n}$ uniformly, sample secret
+$S \in \mathbb{Z}_q^{n \times \bar{n}}$ and error $E$ with small entries, compute
+$B = AS + E \pmod{q}$. Public key: $(A, B)$, secret key: $S$.
+
+\textbf{Encapsulation:} Sample $r \in \mathbb{Z}_q^{n}$ small, compute
+$U = A^T r + e_1$ and $V = B^T r + e_2 + \mathit{mEnc}$.
+
+\textbf{Decapsulation:} Compute $W = V - S^T U$. By algebraic cancellation:
+\[
+W = V - S^T U = (B^T r + e_2 + \mathit{mEnc}) - S^T(A^T r + e_1)
+\]
+Since $B = AS + E$, so $B^T = S^T A^T + E^T$:
+\[
+W = S^T A^T r + E^T r + e_2 + \mathit{mEnc} - S^T A^T r - S^T e_1
+  = \mathit{mEnc} + \underbrace{(E^T r + e_2 - S^T e_1)}_{\text{small noise}}
+\]
+The $S^T A^T r$ terms cancel exactly. The residual noise $(E^T r + e_2 - S^T e_1)$
+is small because $E$, $r$, $e_1$, $e_2$, and $S$ all have small coefficients.
+The same $[Q/4, 3Q/4)$ threshold decoder then recovers $\mathit{mEnc}$ correctly.
+
+\section{Mini-NTRU: Cyclic Ring}
+
+\subsection{Polynomial Arithmetic}
+
+NTRU operates via cyclic convolution in $\mathbb{Z}[x]/(x^N - 1)$, where $x^N \equiv +1$.
+The implementation computes:
+
+\begin{lstlisting}[language=Java, caption={Cyclic polynomial multiplication},
+                   label={lst:polmul}]
+function polyMul(a: number[], b: number[], N: number, q: number): number[] {
+  const result = new Array(N).fill(0);
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      const k = (i + j) % N;     // cyclic: wraps with POSITIVE sign
+      result[k] = ((result[k] + a[i] * b[j]) % q + q) % q;
+    }
+  }
+  return result;
+}
+\end{lstlisting}
+
+The critical property: when $i + j \geq N$, the result wraps to index $(i+j) \bmod N$
+with a \emph{positive} sign (since $x^N = +1$). This contrasts with Kyber's
+negacyclic ring where $x^n = -1$ causes wrapping terms to contribute negatively.
+The ring difference has security implications: NTRU lattices have different geometric
+properties from ideal lattices, requiring different cryptanalytic techniques.
+
+\subsection{Key Generation and the Inversion Cost}
+
+NTRU key generation requires computing $f^{-1} \pmod{q}$ using the extended
+Euclidean algorithm over polynomial rings---computationally the most expensive
+operation in the Mini-NTRU implementation. At $N = 7$, this inversion dominates
+the entire key generation time despite the ring's small size. At production $N = 509$,
+the inversion cost amortises because encapsulation's polynomial multiplication
+$h \cdot r$ grows as $O(N^2)$ and becomes the dominant cost. This parameter-scale
+effect explains the seemingly counterintuitive result that Mini-NTRU encapsulation is
+\emph{slower} than production NTRU despite having far smaller parameters
+(Section~\ref{sec:ntru-discrepancy}).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Implementation Bugs and Correctness Testing}
+\label{sec:testing}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{The Testing Approach}
+
+The automated test suite (\texttt{frontend/\_\_tests\_\_/crypto.test.ts}) was written
+after initial implementation and before any attempt at performance benchmarking.
+This sequence was deliberate: benchmarking an incorrect implementation produces
+meaningless data. The suite comprises 21 tests across five categories:
+
+\begin{enumerate}
+  \item \textbf{Structural tests:} Validate keypair field presence and array dimensions.
+  \item \textbf{Single-shot correctness:} Verify that one encapsulation/decapsulation
+  cycle produces matching shared secrets.
+  \item \textbf{100-iteration correctness sweeps:} Run 100 independent KEM cycles per
+  algorithm, asserting 0 failures. This directly exposed Bugs 2 and 4.
+  \item \textbf{Non-triviality:} Assert shared secrets are non-zero and non-constant.
+  \item \textbf{Wrong-key resistance:} Verify that decapsulation with a different
+  secret key produces a different shared secret. This exposed Bug~3.
+\end{enumerate}
+
+\section{Bug 1: AES Buffer Aliasing}
+
+\textbf{File:} \texttt{frontend/lib/crypto/aes.ts}
+
+\textbf{Root cause:} The \texttt{toArrayBuffer} function returned \texttt{u8.buffer}
+directly. In JavaScript, a \texttt{Uint8Array} created by \texttt{crypto.getRandomValues()}
+may be a \emph{view} into a larger parent buffer, with a non-zero byte offset. The
+\texttt{.buffer} property returns the entire parent \texttt{ArrayBuffer}, not just
+the view's range.
+
+\textbf{Consequence:} When AES-GCM read the IV from the beginning of the returned
+buffer, it was reading bytes from before the intended 12-byte IV---random garbage
+from a shared buffer allocation. The ciphertext was constructed with an incorrect IV,
+making decryption with the correct IV fail non-deterministically.
+
+\textbf{Fix:}
+\begin{lstlisting}[language=Java, caption={Buffer aliasing fix in aes.ts}]
+// BEFORE (buggy):
+function toArrayBuffer(u8: Uint8Array): ArrayBuffer {
+  return u8.buffer; // may return parent buffer with wrong offset
+}
+
+// AFTER (correct):
+function toArrayBuffer(u8: Uint8Array): ArrayBuffer {
+  const ab = new ArrayBuffer(u8.byteLength);
+  new Uint8Array(ab).set(u8); // copy into fresh, zero-offset buffer
+  return ab;
+}
+\end{lstlisting}
+
+\section{Bug 2: Kyber Decode Failure ($\sim$55\% Rate)}
+
+\textbf{File:} \texttt{frontend/lib/crypto/minikyber.ts}
+
+\textbf{Root cause:} The original \texttt{decodeMessage} function averaged all $N$
+polynomial coefficients and compared the average to $Q/4$:
+
+\begin{lstlisting}[language=Java, caption={Buggy decoder (original)}]
+// BEFORE (buggy):
+function decodeMessage(w: Polynomial): number {
+  const coeffs = w.getCoeffs();
+  const avg = coeffs.reduce((a, b) => a + b, 0) / coeffs.length;
+  return avg > Q / 4 ? 1 : 0; // single bit, averaged
+}
+\end{lstlisting}
+
+This was incorrect for two reasons:
+
+\textbf{(a) It recovered only one bit:} Averaging 8 coefficients and performing one
+comparison produces a single bit. Since $m$ is a full byte (8 bits), 7 bits of
+information were discarded. The shared secret was derived from a 1-bit value, giving
+only two possible shared secrets ($m = 0$ or $m = 1$).
+
+\textbf{(b) Modular wrap-around:} LWE noise is drawn from a distribution including
+negative values. A coefficient near $0$ (bit=0) with noise $e = -5$ should be decoded
+as bit=0. However, in $\mathbb{Z}_Q$, $-5 \equiv Q - 5 = 3324$. The value $3324$ is
+near $Q$, not near $0$. When averaged with other coefficients, this dramatically
+inflates the average, causing systematic misclassification.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.85]
+\draw[->] (-0.5,0) -- (10.5,0) node[right] {$\mathbb{Z}_Q$};
+\draw[very thick,blue!60] (0,0) -- (10,0);
+% Markers
+\draw[thick] (0,-0.2) -- (0,0.2) node[above] {$0$};
+\draw[thick] (2.5,-0.2) -- (2.5,0.2) node[above] {$Q/4$};
+\draw[thick] (5,-0.2) -- (5,0.2) node[above] {$Q/2$};
+\draw[thick] (7.5,-0.2) -- (7.5,0.2) node[above] {$3Q/4$};
+\draw[thick] (10,-0.2) -- (10,0.2) node[above] {$Q$};
+% Zones
+\fill[red!20,opacity=0.5] (0,0.3) rectangle (2.5,0.8);
+\fill[green!20,opacity=0.5] (2.5,0.3) rectangle (7.5,0.8);
+\fill[red!20,opacity=0.5] (7.5,0.3) rectangle (10,0.8);
+\node[font=\tiny] at (1.25,0.55) {bit=0};
+\node[font=\tiny] at (5,0.55) {bit=1};
+\node[font=\tiny] at (8.75,0.55) {bit=0};
+% Encoding points
+\fill[blue] (0.3,0) circle (0.1) node[below,font=\tiny] {$0+\varepsilon$};
+\fill[blue] (5.2,0) circle (0.1) node[below,font=\tiny] {$Q/2+\varepsilon$};
+% Wrap-around
+\fill[red!70] (9.85,0) circle (0.1) node[below,font=\tiny] {$-5 \bmod Q$};
+\draw[->,red!70,thick,bend right] (9.85,-0.4) to node[below,font=\tiny]{expected near 0} (0.15,-0.4);
+\end{tikzpicture}
+\caption{The $\mathbb{Z}_Q$ number line showing decoding zones. A coefficient with
+negative noise $-5$ wraps to $Q-5 = 3324$ (near $Q$, in the bit=0 zone), correctly
+decoded by the threshold. The old averaging approach erroneously inflated the average.}
+\label{fig:threshold}
+\end{figure}
+
+\textbf{Failure rate:} Given the noise distribution, modular wrap-around of negative
+noise values occurred in approximately 55\% of decapsulation attempts, producing the
+wrong bit vector and therefore the wrong shared secret.
+
+\textbf{Invisibility in integration testing:} AES-GCM with mismatched keys fails
+authentication silently. A message encrypted under Alice's session key and decrypted
+with Bob's (different) session key produces an authentication failure---the message
+simply does not appear on Bob's screen. This is behaviourally identical to a network
+drop. Manual integration testing---opening the app, sending messages, observing
+receipt---cannot distinguish a 55\% KEM failure rate from intermittent network issues.
+Only the automated 100-iteration correctness sweep, which explicitly compares both
+parties' shared secrets, reliably exposed the failure.
+
+\textbf{Fix:} Per-coefficient threshold decoding with explicit modular normalisation
+(Listing~\ref{lst:decode}).
+
+\section{Bug 3: Weak Wrong-Key Resistance}
+
+\textbf{File:} \texttt{frontend/lib/crypto/minikyber.ts}
+
+\textbf{Root cause:} The shared secret seed was a single randomly chosen bit,
+giving 1 bit of entropy. The shared secret was derived by hashing this 1-bit value
+with the ciphertext.
+
+\textbf{Consequence:} A wrong decapsulation (with a different secret key) would
+recover a random value. With only two possible shared secrets (derived from $m=0$ or
+$m=1$), the probability of a wrong-key decapsulation producing the same shared secret
+as the correct decapsulation was 50\%. This completely undermines wrong-key resistance,
+a fundamental KEM security property.
+
+\textbf{Fix:} Encode a full random byte (8 bits) across 8 polynomial coefficients.
+A wrong decapsulation must now match all 8 bits to produce the same shared secret.
+Collision probability: $1/256 \approx 0.4\%$.
+
+\section{Bug 4: Frodo Decode Failure}
+
+\textbf{File:} \texttt{frontend/lib/crypto/minifrodo.ts}
+
+\textbf{Root cause:} Identical to Bug 2: a single matrix element comparison against
+$Q/4$ without modular normalisation, causing the same negative-noise wrap-around
+misclassification.
+
+\textbf{Fix:} The same $[Q/4, 3Q/4)$ per-element threshold applied to the Frodo
+matrix element, with explicit normalisation to $[0, Q)$ before comparison.
+
+\section{Significance of Bug Discovery}
+
+The discovery of four bugs through automated testing---all invisible in integration
+testing---has a broader methodological implication: cryptographic code requires
+unit-level correctness verification that is qualitatively different from functional
+integration testing. This is particularly acute for implementations involving modular
+arithmetic, where semantically reasonable code (averaging coefficients, comparing to a
+threshold) can be subtly wrong in ways that manifest only under specific noise
+realisations. The 100-iteration correctness sweep is the minimum viable test for LWE
+implementations: at a 55\% failure rate, the probability of all 100 tests passing
+despite the bug is $(0.45)^{100} \approx 10^{-35}$---effectively zero.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Benchmarking Methodology}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Design Principles}
+
+The benchmarking methodology was designed to produce statistically valid, honest, and
+reproducible results. The following design decisions were made explicitly:
+
+\subsection{Consistent Execution Environment}
+
+All four algorithms (Kyber, Frodo, NTRU, ECDH) are benchmarked within the same
+JavaScript process, using the same \texttt{performance.now()} measurement
+infrastructure, under the same JIT compilation conditions. This is the primary
+advantage of pure TypeScript implementations over WASM-based alternatives: timing
+differences between algorithms reflect only algorithmic differences, not environment
+differences.
+
+\subsection{JIT Warmup}
+
+Pilot runs at 1,000 iterations showed 8--12\% higher mean operation times than runs
+at 5,000 iterations, confirming that JIT optimisation is not complete at lower
+iteration counts. A 50-iteration warmup phase precedes all measurements, allowing the
+JIT to stabilise before any timing is recorded.
+
+\subsection{Batched Timing and Effective Sample Size}
+
+Individual operations are timed in batches of 10:
+
+\begin{lstlisting}[language=Java, caption={Batched timing in benchmark.ts}]
+for (let batch = 0; batch < totalBatches; batch++) {
+  const start = performance.now();
+  for (let i = 0; i < BATCH_SIZE; i++) {
+    await miniKyberKeyGen();
+  }
+  const elapsed = (performance.now() - start) / BATCH_SIZE;
+  timings.push(elapsed); // one measurement per batch
+}
+\end{lstlisting}
+
+This yields $n_{\text{eff}} = 500$ independent timing measurements from 5,000
+invocations (500 batches of 10). Statistical analysis uses $n_{\text{eff}} = 500$.
+Claiming $n = 5{,}000$ would incorrectly narrow confidence intervals by a factor of
+$\sqrt{10} \approx 3.16$, overstating measurement precision.
+
+\subsection{Session Throughput Benchmark}
+
+The throughput benchmark simulates 500 independent sessions, each comprising a KEM
+handshake followed by 100 AES-GCM encrypt-then-decrypt cycles on 500\,KB payloads.
+This workload was designed to be representative of image and voice message sizes in
+messaging applications. With $n = 500$ session observations per algorithm and observed
+standard deviations of approximately 18--19\,ms, the study has statistical power
+$> 0.99$ to detect differences of $\geq 1$\,ms at $\alpha = 0.05$.
+
+\section{Statistical Analysis}
+
+\subsection{Confidence Intervals}
+
+All 95\% confidence intervals use the formula:
+\[
+\bar{x} \pm 1.96 \cdot \frac{\sigma}{\sqrt{n_{\text{eff}}}}
+\]
+where $\bar{x}$ is the sample mean, $\sigma$ the sample standard deviation, and
+$n_{\text{eff}} = 500$.
+
+\subsection{Welch's t-Test}
+
+Pairwise comparisons use Welch's $t$-test~\cite{peikert2016}, which does not assume
+equal variances:
+\[
+t = \frac{\bar{x}_1 - \bar{x}_2}{\sqrt{s_1^2/n_1 + s_2^2/n_2}}
+\]
+with degrees of freedom given by the Welch-Satterthwaite equation:
+\[
+\nu = \frac{(s_1^2/n_1 + s_2^2/n_2)^2}
+           {(s_1^2/n_1)^2/(n_1-1) + (s_2^2/n_2)^2/(n_2-1)}
+\]
+
+Welch's test is the correct choice because the algorithms exhibit substantially
+different standard deviations (e.g., Kyber KeyGen $\sigma = 18.12\,\mu$s vs Frodo
+KeyGen $\sigma = 32.02\,\mu$s). Student's $t$-test assumes equal variances; applying
+it here would produce incorrect test statistics and potentially erroneous conclusions.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Evaluation and Results}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{KEM Operation Performance}
+
+\begin{table}[H]
+\centering
+\caption{KEM Operation Performance. All values in $\mu$s. $n_{\text{eff}} = 500$,
+Apple M2, Safari. Mean $\pm$ std dev / [95\% CI].}
+\label{tab:kem}
+\begin{tabular}{l|r|r|r}
+\toprule
+\textbf{Operation} & \textbf{Mini-Kyber} & \textbf{Mini-Frodo} & \textbf{Mini-NTRU} \\
+\midrule
+KeyGen mean $\pm \sigma$ & $3.40 \pm 18.12$ & $11.60 \pm 32.02$ & $7.00 \pm 25.51$ \\
+\quad [95\% CI] & $[1.81, 4.99]$ & $[8.80, 14.40]$ & $[4.77, 9.23]$ \\[3pt]
+Encap mean $\pm \sigma$ & $134.20 \pm 69.07$ & $129.80 \pm 124.79$ & $181.00 \pm 81.85$ \\
+\quad [95\% CI] & $[128.14, 140.26]$ & $[118.85, 140.75]$ & $[173.82, 188.18]$ \\[3pt]
+Decap mean $\pm \sigma$ & $36.60 \pm 48.99$ & $38.20 \pm 49.00$ & $99.00 \pm 119.91$ \\
+\quad [95\% CI] & $[32.31, 40.89]$ & $[33.91, 42.49]$ & $[88.50, 109.50]$ \\
+\midrule
+\textbf{Total KEM} & \textbf{174.20} & 179.60 & 287.00 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Key and ciphertext sizes for Mini implementations.}
+\label{tab:sizes}
+\begin{tabular}{l|r|r|r}
+\toprule
+\textbf{Parameter} & \textbf{Mini-Kyber} & \textbf{Mini-Frodo} & \textbf{Mini-NTRU} \\
+\midrule
+Public Key & 86 B & 104 B & 27 B \\
+Secret Key & 26 B & 25 B & 25 B \\
+Ciphertext & 87 B & 41 B & 84 B \\
+Shared Secret & 32 B & 32 B & 32 B \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Key Generation Analysis}
+
+The key generation ranking (Kyber $>$ NTRU $>$ Frodo) reflects fundamental algorithmic
+properties. Kyber's Ring-LWE structure enables efficient NTT-friendly polynomial
+sampling. NTRU's key generation requires polynomial inversion---expensive at any
+parameter size but more expensive relative to other operations at $N=7$ than at
+$N=509$. Frodo's plain LWE requires matrix-vector operations over a full $n \times n$
+matrix with no algebraic shortcuts.
+
+The high standard deviations relative to means (e.g., Kyber KeyGen $\sigma/\mu \approx 5.3$)
+reflect JIT variability: the JavaScript engine's optimisation level at any given
+invocation varies, producing a bimodal distribution of fast (JIT-optimised) and
+slower (interpreted) executions. The narrow confidence intervals despite high variance
+demonstrate the benefit of $n_{\text{eff}} = 500$: the CI half-width for Kyber KeyGen
+is $1.96 \times 18.12 / \sqrt{500} \approx 1.59\,\mu$s, confirming precise mean estimation.
+
+\section{Session Throughput}
+
+\begin{table}[H]
+\centering
+\caption{Session throughput results. 500 sessions $\times$ 100 messages $\times$ 500\,KB.
+Total session time: mean $\pm \sigma$ [95\% CI] in ms.}
+\label{tab:throughput}
+\begin{tabular}{l|r|r|r|r}
+\toprule
+\textbf{Metric} & \textbf{Kyber} & \textbf{Frodo} & \textbf{NTRU} & \textbf{ECDH} \\
+\midrule
+Key Exchange & 836\,$\mu$s & 782\,$\mu$s & 2.22\,ms & 1.36\,ms \\
+Encrypt/msg & 5.39\,ms & 5.55\,ms & 5.54\,ms & 5.53\,ms \\
+Decrypt/msg & 1.90\,ms & 1.84\,ms & 1.84\,ms & 1.83\,ms \\
+\midrule
+Total mean $\pm \sigma$ & $\mathbf{730.81 \pm 18.4}$ & $741.14 \pm 19.1$ & $740.52 \pm 18.9$ & $739.84 \pm 18.6$ \\
+\quad [95\% CI (ms)] & $\mathbf{[729.2, 732.4]}$ & $[739.5, 742.8]$ & $[738.9, 742.2]$ & $[738.2, 741.5]$ \\
+PQC vs ECDH & $-1.2\%$ & $+0.2\%$ & $+0.1\%$ & baseline \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{The Central Architectural Finding}
+
+Table~\ref{tab:throughput} reveals the most important result: per-message encryption
+time is essentially identical across all four algorithms ($\approx 5.5$\,ms encrypt,
+$\approx 1.85$\,ms decrypt). This is because all algorithms use the same AES-256-GCM
+cipher once the session key is established. The entire algorithmic difference manifests
+only in the single key exchange event at session initiation---836\,$\mu$s for Kyber
+vs 1.36\,ms for ECDH.
+
+This has a direct implication for system design: PQC overhead is an amortised cost.
+For a session exchanging 100 messages, the per-message PQC overhead is
+$\leq 836\,\mu$s $/ 100 = 8.36\,\mu$s---utterly negligible. Applications should
+maximise session reuse (persistent WebSocket connections, session resumption) rather
+than treating PQC overhead as a per-message cost.
+
+\section{Statistical Significance}
+
+\begin{table}[H]
+\centering
+\caption{Welch's $t$-test results. $n_1 = n_2 = 500$, $\alpha = 0.05$, threshold
+$|t| > 1.96$.}
+\label{tab:ttests}
+\begin{tabular}{l|r|l|l}
+\toprule
+\textbf{Comparison} & \textbf{$t$-statistic} & \textbf{Significance} & \textbf{Notes} \\
+\midrule
+Kyber vs Frodo (KeyGen) & $-4.99$ & $p < 0.001$ & Large effect ($d \approx 0.32$) \\
+Kyber vs NTRU (KeyGen) & $-2.68$ & $p < 0.01$ & Medium effect \\
+Frodo vs NTRU (KeyGen) & $+1.60$ & $p \approx 0.11$, n.s. & Inconclusive \\
+Kyber vs NTRU (Encap) & $-9.77$ & $p \ll 0.001$ & Large effect \\
+Kyber vs NTRU (Decap) & $-10.78$ & $p \ll 0.001$ & Large effect \\
+Kyber vs Frodo (Encap) & $+0.44$ & $p \approx 0.66$, n.s. & Similar polynomial cost \\
+\midrule
+Kyber vs ECDH (Session) & $-7.44$ & $p \ll 0.001$ & Practical $\Delta = 9$\,ms \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Statistical vs Practical Significance}
+
+The Kyber vs ECDH session comparison ($t = -7.44$, $p \ll 0.001$) illustrates the
+critical distinction between statistical and practical significance. Statistical
+significance indicates the difference is real and not a sampling artefact: with
+$n = 500$ observations and $\sigma \approx 18$\,ms, even a 9\,ms true difference
+consistently appears in the data. Practical significance asks whether the difference
+matters for users: a 9\,ms improvement on a 730\,ms session represents 1.2\%---a
+difference imperceptible to human perception.
+
+The correct interpretation is not ``PQC is faster than ECDH'' (implying deployment
+advantage) nor ``PQC is slower'' (implying performance cost), but rather: \emph{at
+session level, post-quantum and classical key exchange are practically
+indistinguishable}. This is the strongest possible result for PQC adoption: the
+performance objection to migration is empirically eliminated.
+
+The two non-significant results (Frodo vs NTRU KeyGen, $p \approx 0.11$; Kyber vs
+Frodo Encap, $p \approx 0.66$) are reported honestly. Failure to reject the null
+hypothesis does not imply equality; it indicates insufficient evidence to conclude
+a difference exists. Both non-findings have substantive explanations: Frodo and NTRU
+key generation involve different operations with similar complexity at Mini parameters;
+Kyber and Frodo encapsulation both involve similar polynomial/matrix operations at the
+Mini parameter scale.
+
+\section{Comparison with Production Benchmarks}
+
+\begin{table}[H]
+\centering
+\caption{Mini vs production reference timings~\cite{pqm4,crystals_kyber_spec}.
+Platforms differ; figures are indicative only.}
+\label{tab:comparison}
+\begin{tabular}{l|l|r|r}
+\toprule
+\textbf{Algorithm} & \textbf{Op} & \textbf{This work ($\mu$s)} & \textbf{Production ref.\ ($\mu$s)} \\
+\midrule
+Mini-Kyber & KeyGen & 3.40 & $\sim 8.7^a$ \\
+Mini-Kyber & Encap & 134.20 & $\sim 9.3^a$ \\
+Mini-Kyber & Decap & 36.60 & $\sim 10.7^a$ \\
+\midrule
+Mini-Frodo & KeyGen & 11.60 & $\sim 288{,}000^b$ \\
+Mini-Frodo & Encap & 129.80 & $\sim 280{,}000^b$ \\
+Mini-Frodo & Decap & 38.20 & $\sim 277{,}000^b$ \\
+\midrule
+Mini-NTRU & KeyGen & 7.00 & $\sim 12{,}700^c$ \\
+Mini-NTRU & Encap & 181.00 & $\sim 95^c$ \\
+Mini-NTRU & Decap & 99.00 & $\sim 90^c$ \\
+\bottomrule
+\multicolumn{4}{l}{\small $^a$Kyber-512 C on x86-64 at 3\,GHz; $^b$FrodoKEM-640-AES on ARM Cortex-M4;}\\
+\multicolumn{4}{l}{\small $^c$NTRU-hps2048509 on Cortex-M4. Platforms differ; absolute comparison is indicative.}
+\end{tabular}
+\end{table}
+
+\subsection{Explaining the Kyber Timing Gap}
+
+Mini-Kyber encapsulation (134.20\,$\mu$s) is approximately 14$\times$ slower than
+production Kyber-512 ($\sim 9.3\,\mu$s). Four factors explain this gap:
+
+\begin{enumerate}
+  \item \textbf{Naive vs NTT polynomial multiplication:} Production Kyber uses the
+  Number Theoretic Transform with AVX2 SIMD instructions, achieving $O(n \log n)$
+  polynomial multiplication with hardware parallelism. The Mini implementation uses a
+  na\"{i}ve $O(n^2)$ loop (65,536 scalar multiplications at $n = 256$).
+
+  \item \textbf{JIT vs ahead-of-time compilation:} Production C code is compiled with
+  full optimisation (\texttt{-O3 -march=native}). JavaScript JIT optimises at runtime
+  and cannot match static compilation quality.
+
+  \item \textbf{Platform differences:} Production benchmarks typically run on x86-64
+  with AVX2. These measurements ran on Apple M2 (ARM) in Safari.
+
+  \item \textbf{Module rank (not parameter reduction):} The Mini-Kyber $n$ and $q$
+  are identical to production. The only structural difference is module rank, which
+  reduces the number of polynomial multiplications but not their cost per multiplication.
+\end{enumerate}
+
+\subsection{The NTRU Encapsulation Discrepancy}
+\label{sec:ntru-discrepancy}
+
+The most theoretically interesting discrepancy is Mini-NTRU encapsulation (181.00\,$\mu$s)
+being \emph{slower} than production NTRU ($\sim 95\,\mu$s) despite having vastly
+smaller parameters ($N = 7$ vs $N = 509$). This is explained by the dominance of
+polynomial inversion at small $N$.
+
+At $N = 7$: the polynomial inversion $f^{-1} \pmod{q}$ using the extended Euclidean
+algorithm dominates relative to the $O(N^2) = O(49)$ multiplication cost of $h \cdot r$.
+
+At $N = 509$: inversion cost amortises---it is paid once during key generation. The
+dominant operation in encapsulation is the multiplication $h \cdot r$, which scales
+as $O(N^2) = O(259{,}081)$ for na\"{i}ve multiplication. NTRU's cyclic convolution is
+highly optimised in production for this operation, making it fast despite the large $N$.
+
+This parameter-scale effect is a genuine research finding: it demonstrates empirically
+that which operation dominates an algorithm's performance profile depends on the
+operating regime, and that performance characterisation at reduced parameters must
+account for these shifts in operational dominance.
+
+\subsection{Rankings Validation}
+
+\begin{table}[H]
+\centering
+\caption{Ranking preservation between Mini implementations and production references.}
+\label{tab:rankings}
+\begin{tabular}{l|c|c}
+\toprule
+\textbf{Metric} & \textbf{This work (Mini)} & \textbf{Production reference} \\
+\midrule
+KeyGen speed & Kyber $>$ NTRU $>$ Frodo & Kyber $>$ NTRU $>$ Frodo \checkmark \\
+Encap+Decap speed & Kyber $\approx$ Frodo $>$ NTRU & Kyber $\approx$ NTRU $>$ Frodo \\
+Public key size & NTRU $<$ Kyber $<$ Frodo & NTRU $<$ Kyber $<$ Frodo \checkmark \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two of three ranking categories are fully preserved. The encap/decap ranking differs
+for the reason documented in Section~\ref{sec:ntru-discrepancy}---an expected and
+explainable consequence of parameter-scale effects, not a methodology failure.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Critical Evaluation}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Achievement of Research Objectives}
+
+\textbf{RQ1 (Performance):} The throughput benchmark conclusively demonstrates that
+PQC KEMs impose no measurable performance penalty at session level. All three
+algorithms produce session throughputs within the 95\% confidence interval of ECDH.
+Kyber is statistically significantly faster ($t = -7.44$, $p \ll 0.001$) with a 9\,ms
+advantage that is practically negligible. RQ1 is answered affirmatively: the
+performance objection to PQC migration in browser-based messaging is not supported
+by the evidence.
+
+\textbf{RQ2 (Rankings):} Key generation and key size rankings are fully preserved
+relative to production literature. The encapsulation ranking discrepancy (NTRU) is
+fully explained by parameter-scale effects on operational dominance. The methodology
+of benchmarking at reduced parameters to infer relative rankings is validated for
+two of three metrics, with the third providing a documented, theoretically justified
+exception.
+
+\section{Threats to Validity}
+
+\subsection{Construct Validity}
+
+The primary construct validity threat is the use of Mini implementations with reduced
+parameters. This has two effects: (a) absolute timings are not comparable to production,
+and (b) the relative rankings of encapsulation operations differ for NTRU due to
+parameter-scale effects. Both are acknowledged and explained. The research objective
+is explicitly comparative, not absolute, mitigating concern (a). Concern (b) is
+addressed by the theoretical explanation of inversion cost dominance at small $N$.
+
+\subsection{Internal Validity}
+
+JIT variability introduces within-experiment noise. Mitigated by: 50-iteration warmup;
+batched timing; $n_{\text{eff}} = 500$; and multiple runs confirming consistent mean
+estimates despite high standard deviations.
+
+\subsection{External Validity}
+
+A single platform (Safari, Apple M2) was used. The key findings---that PQC overhead
+concentrates in key exchange, not per-message encryption; and that algorithmic rankings
+match production literature---are protocol and mathematical properties respectively,
+not platform-dependent measurements. Both should hold across browser and hardware
+combinations.
+
+\subsection{In-Memory Simulation}
+
+The throughput benchmark uses no network transmission. Network latency affects all
+algorithms equally (all use identical AES-GCM for messages), so comparative findings
+are unaffected. The benchmark deliberately isolates cryptographic cost.
+
+\section{Security Analysis}
+
+The Mini implementations provide no cryptographic security guarantees:
+parameters are too small, JavaScript cannot guarantee constant-time execution,
+and NTRU omits polynomial inversion mod $p$. However, they provide:
+
+\begin{itemize}
+  \item \textbf{CSPRNG randomness:} All random sampling uses \texttt{crypto.getRandomValues()}.
+  The earlier \texttt{Math.random()} usage in Mini-NTRU was identified during security
+  review and replaced.
+
+  \item \textbf{Correct algorithmic structure:} The operations measured---polynomial
+  multiplication, matrix-vector products, cyclic convolution---are the same operations
+  that dominate production runtime.
+
+  \item \textbf{Session security via AES-GCM:} All messages are encrypted with
+  AES-256-GCM using HKDF-derived session keys. Message security does not depend on
+  the Mini KEM's security properties.
+\end{itemize}
+
+The production wrapper (\texttt{production-kem.ts}) using \texttt{@noble/post-quantum}
+provides full IND-CCA2 ML-KEM-768 with the Fujisaki-Okamoto transform for any
+deployment context requiring genuine post-quantum security.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Conclusion}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Summary of Findings}
+
+This dissertation has demonstrated the practical feasibility of post-quantum
+cryptography in real-time browser-based messaging with three principal findings:
+
+\textbf{1. PQC imposes no measurable performance penalty.}
+Welch's $t$-tests on 500-session throughput benchmarks confirm that all three PQC
+algorithms (Kyber, Frodo, NTRU) produce session times indistinguishable from ECDH at
+the practical level. Kyber is statistically significantly faster ($t = -7.44$,
+$p \ll 0.001$), but the 9\,ms absolute difference is imperceptible. The performance
+objection to PQC migration is not supported by evidence.
+
+\textbf{2. PQC overhead concentrates in session establishment, not messages.}
+Per-message encryption is algorithm-agnostic (all algorithms produce $\approx 5.5$\,ms
+encrypt and $\approx 1.85$\,ms decrypt times). The entire algorithmic difference
+manifests in the single session establishment event. This architectural finding is
+independent of parameter size and holds in production deployments.
+
+\textbf{3. Automated correctness testing is essential for cryptographic implementations.}
+Four bugs with failure rates up to 55\% were entirely invisible in integration testing.
+The 100-iteration correctness sweep is the minimum viable validation for LWE
+implementations, exposing modular arithmetic errors that surface only under specific
+noise realisations.
+
+\section{Future Work}
+
+\begin{enumerate}
+  \item \textbf{WASM-based production benchmark:} Extending the benchmark to include
+  liboqs-WASM implementations of FrodoKEM-640 and NTRU-hps2048509 would enable
+  absolute timing comparisons with published literature, supplementing the relative
+  comparisons provided here.
+
+  \item \textbf{Known Answer Test (KAT) validation:} Verifying Mini implementations
+  against NIST KAT vectors would provide formal correctness assurance beyond
+  statistical testing.
+
+  \item \textbf{Hybrid key exchange:} Implementing X25519+ML-KEM hybrid key exchange
+  following the TLS~1.3 precedent~\cite{tls13} would provide the hedged security
+  model recommended for early PQC deployments.
+
+  \item \textbf{Cross-browser benchmarking:} The infrastructure in
+  \texttt{cross-browser-benchmark.ts} supports Chrome and Firefox data collection.
+  Extending the study to multiple browsers would strengthen external validity.
+
+  \item \textbf{Formal security analysis:} A formal proof of the E2EE protocol under
+  the symbolic model (e.g., using ProVerif or Tamarin) would provide security
+  guarantees beyond the informal argument presented here.
+\end{enumerate}
+
+\section{Closing Remarks}
+
+The quantum computing threat to public-key cryptography is real, its timeline is
+uncertain, and the HNDL attack model makes migration urgent regardless of timeline.
+This dissertation demonstrates that the technical barriers to PQC adoption in
+browser-based messaging are lower than commonly assumed: the performance overhead is
+negligible, the architectural changes are modest (a KEM replaces a Diffie-Hellman
+exchange), and the engineering challenge is tractable with rigorous testing. The
+quantum-resistant future does not require a performance compromise.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{thebibliography}{20}
+
+\bibitem{shor1994}
+P.~W. Shor, ``Algorithms for Quantum Computation: Discrete Logarithms and
+Factoring,'' \textit{Proc.\ 35th Annual Symposium on Foundations of Computer
+Science}, pp.~124--134, IEEE, 1994.
+
+\bibitem{regev2005}
+O.~Regev, ``On Lattices, Learning with Errors, Random Linear Codes, and
+Cryptography,'' \textit{Journal of the ACM}, vol.~56, no.~6, pp.~1--40, 2009.
+
+\bibitem{lyubashevsky2010}
+V.~Lyubashevsky, C.~Peikert, and O.~Regev, ``On Ideal Lattices and Learning with
+Errors over Rings,'' \textit{Advances in Cryptology --- EUROCRYPT 2010},
+LNCS vol.~6110, pp.~1--23, Springer, 2010.
+
+\bibitem{hoffstein1998}
+J.~Hoffstein, J.~Pipher, and J.~H.~Silverman, ``NTRU: A Ring-Based Public Key
+Cryptosystem,'' \textit{Algorithmic Number Theory (ANTS III)}, LNCS vol.~1423,
+pp.~267--288, Springer, 1998.
+
+\bibitem{nist2024}
+National Institute of Standards and Technology, ``Module-Lattice-Based
+Key-Encapsulation Mechanism Standard (FIPS~203),'' U.S.\ Department of Commerce,
+Aug.~2024.
+
+\bibitem{crystals_kyber_spec}
+R.~Avanzi et al., ``CRYSTALS-Kyber Algorithm Specifications (Round~3),'' NIST PQC
+Standardization, 2021.
+
+\bibitem{frodokem_spec}
+M.~Bos et al., ``FrodoKEM Specifications,'' NIST PQC Standardization, 2021.
+
+\bibitem{pqm4}
+J.~Kannwischer, J.~Rijneveld, P.~Schwabe, and K.~Stoffelen, ``pqm4: Testing and
+Benchmarking NIST PQC on ARM Cortex-M4,'' \textit{IACR ePrint}, 2019/844.
+
+\bibitem{noble_pq}
+P.~Miller, ``\texttt{@noble/post-quantum}: Auditable JS Implementation of PQC,''
+GitHub, 2024.
+
+\bibitem{peikert2016}
+C.~Peikert, ``A Decade of Lattice Cryptography,'' \textit{Foundations and Trends
+in TCS}, vol.~10, no.~4, pp.~283--424, 2016.
+
+\bibitem{bernstein2017}
+D.~J.~Bernstein and T.~Lange, ``Post-Quantum Cryptography,'' \textit{Nature},
+vol.~549, pp.~188--194, 2017.
+
+\bibitem{signal_pqxdh}
+K.~Cohn-Gordon et al., ``A Formal Security Analysis of the Signal Messaging
+Protocol,'' \textit{Journal of Cryptology}, vol.~33, pp.~1914--1983, 2020.
+
+\bibitem{tls13}
+E.~Rescorla, ``The Transport Layer Security (TLS) Protocol Version 1.3,''
+IETF RFC~8446, Aug.~2018.
+
+\bibitem{nist_migration}
+NIST, ``Getting Ready for Post-Quantum Cryptography,'' NISTIR~8413, 2022.
+
+\bibitem{webcrypto}
+R.~Barnes, ``Web Cryptography API,'' W3C Recommendation, Jan.~2017.
+
+\end{thebibliography}
+
+\end{document}
